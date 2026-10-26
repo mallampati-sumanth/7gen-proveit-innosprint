@@ -1,6 +1,10 @@
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlmodel import SQLModel, Field
+
+
+def get_utc_now():
+    return datetime.now(timezone.utc)
 
 
 class Run(SQLModel, table=True):
@@ -10,8 +14,8 @@ class Run(SQLModel, table=True):
     prompt: str
     target_repo: Optional[str] = None
     cloud_mode: str = Field(default="mock")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=get_utc_now)
+    updated_at: datetime = Field(default_factory=get_utc_now)
 
 
 class Event(SQLModel, table=True):
@@ -20,7 +24,7 @@ class Event(SQLModel, table=True):
     event_type: str  # PLAN, TOOL_CALL, POLICY_VERDICT, PROOF_RESULT, SYSTEM
     summary: str
     details_json: str = Field(default="{}")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=get_utc_now)
 
 
 class Incident(SQLModel, table=True):
@@ -31,8 +35,8 @@ class Incident(SQLModel, table=True):
     status: str = Field(default="DETECTED")  # DETECTED, DIAGNOSING, PROVING, HEALED, ESCALATED
     attempts: int = Field(default=0)
     proof_bundle_json: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=get_utc_now)
+    updated_at: datetime = Field(default_factory=get_utc_now)
 
 
 class Approval(SQLModel, table=True):
@@ -44,7 +48,7 @@ class Approval(SQLModel, table=True):
     blast_radius: int
     reasons_json: str
     status: str = Field(default="PENDING")  # PENDING, APPROVED, REJECTED
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=get_utc_now)
 
 
 class LedgerEntry(SQLModel, table=True):
@@ -68,4 +72,4 @@ class BenchmarkResult(SQLModel, table=True):
     time_to_recovery_seconds: float
     policy_violations_detected: int
     error_message: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=get_utc_now)

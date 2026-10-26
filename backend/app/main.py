@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.config import settings
 from backend.app.db import init_db
-from backend.app.routers import health, auth
+from backend.app.routers import health, auth, agent
 
 
 @asynccontextmanager
@@ -33,3 +33,4 @@ app.add_middleware(
 # Register routers
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(agent.router)
