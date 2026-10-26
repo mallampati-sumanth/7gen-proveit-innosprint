@@ -46,11 +46,18 @@ class Settings(BaseSettings):
     MAX_MANAGED_INSTANCES: int = 2
 
     # LLM Settings
-    LLM_PROVIDER: str = "gemini"
+    LLM_PROVIDER: str = "gemini"  # gemini | openai | anthropic | groq | ollama
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.5-flash"
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o"
+    OPENAI_BASE_URL: Optional[str] = None
+    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_MODEL: str = "claude-3-5-sonnet-20241022"
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "llama3.2"
     MAX_AGENT_STEPS: int = 25
 
     # Chaos & GitHub Integration

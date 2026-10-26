@@ -1,3 +1,4 @@
+# pyrefly: ignore[missing-import]
 from sqlmodel import SQLModel, create_engine, Session
 from backend.app.config import settings
 
@@ -15,10 +16,90 @@ engine = create_engine(
 
 def init_db() -> None:
     """Initialize database tables."""
+    from backend.app.entities.models import (
+        Run,
+        Event,
+        Incident,
+        Approval,
+        LedgerEntry,
+        RepoConfig,
+        RepoEnvVar,
+        EC2Instance,
+        User,
+    )
+    import hashlib
+    import secrets
+    import uuid
+    from sqlmodel import select
+
     SQLModel.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        # Seed Admin User if not exists
+        admin_user = session.exec(select(User).where(User.username == settings.DEMO_USERNAME)).first()
+        if not admin_user:
+            salt = secrets.token_hex(16)
+            hashed = hashlib.sha256((salt + settings.DEMO_PASSWORD).encode("utf-8")).hexdigest()
+            admin = User(
+                user_id=f"usr_{uuid.uuid4().hex[:12]}",
+                email="admin@proveit.cloud",
+                username=settings.DEMO_USERNAME,
+                name="ProveIt Administrator",
+                hashed_password=hashed,
+                salt=salt,
+                auth_provider="email",
+                is_admin=True,
+                is_active=True,
+            )
+            session.add(admin)
+            session.commit()
+
+        # Seed EC2 Fleet Instances if empty
+        existing_ec2 = session.exec(select(EC2Instance)).first()
+        if not existing_ec2:
+            initial_instances = [
+                EC2Instance(
+                    instance_id="i-0a8f9c12345678",
+                    name="Production App Host (EC2-01)",
+                    public_ip="54.210.14.88",
+                    private_ip="10.0.1.42",
+                    region="us-east-1",
+                    instance_type="t3.small",
+                    state="running",
+                    ssh_user="ubuntu",
+                    auth_method="ssh_key",
+                    docker_installed=True,
+                    docker_version="Docker v26.1.4, compose v2.27.0",
+                    deployed_containers_count=0,
+                    deployed_apps_json="[]",
+                    last_ping_status="HEALTHY",
+                    last_ping_latency_ms=16.4,
+                ),
+                EC2Instance(
+                    instance_id="i-0b7e2d98765432",
+                    name="Staging & Worker Node (EC2-02)",
+                    public_ip="3.235.19.112",
+                    private_ip="10.0.2.19",
+                    region="us-east-1",
+                    instance_type="t3.medium",
+                    state="running",
+                    ssh_user="ubuntu",
+                    auth_method="ssh_key",
+                    docker_installed=True,
+                    docker_version="Docker v26.1.4, compose v2.27.0",
+                    deployed_containers_count=0,
+                    deployed_apps_json="[]",
+                    last_ping_status="HEALTHY",
+                    last_ping_latency_ms=22.1,
+                ),
+            ]
+            session.add_all(initial_instances)
+            session.commit()
+
 
 
 def get_session():
     """Dependency for obtaining database sessions."""
     with Session(engine) as session:
         yield session
+

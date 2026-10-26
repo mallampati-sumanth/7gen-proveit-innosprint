@@ -148,37 +148,37 @@ export function BenchmarkView({ results, onRefresh }: BenchmarkViewProps) {
             <tbody className="divide-y divide-[#1e2432] text-slate-300">
               {(results.length === 0
                 ? [
-                    { s: "WRONG_PORT", m: "PROVEIT", f: true, t: 14.2, v: 0 },
-                    { s: "WRONG_PORT", m: "BASELINE", f: false, t: 48.0, v: 2 },
-                    { s: "MISSING_ENV", m: "PROVEIT", f: true, t: 18.1, v: 0 },
-                    { s: "MISSING_ENV", m: "BASELINE", f: true, t: 36.4, v: 1 },
-                    { s: "BAD_HEALTH_PATH", m: "PROVEIT", f: true, t: 12.5, v: 0 },
-                    { s: "BAD_HEALTH_PATH", m: "BASELINE", f: false, t: 55.2, v: 3 },
-                    { s: "OOM_EXIT_137", m: "PROVEIT", f: true, t: 21.0, v: 0 },
-                    { s: "GATEWAY_502", m: "PROVEIT", f: true, t: 19.3, v: 0 },
+                    { scenario: "WRONG_PORT", mode: "PROVEIT", fixed: true, time_to_recovery_seconds: 14.2, policy_violations_detected: 0 },
+                    { scenario: "WRONG_PORT", mode: "BASELINE", fixed: false, time_to_recovery_seconds: 48.0, policy_violations_detected: 2 },
+                    { scenario: "MISSING_ENV", mode: "PROVEIT", fixed: true, time_to_recovery_seconds: 18.1, policy_violations_detected: 0 },
+                    { scenario: "MISSING_ENV", mode: "BASELINE", fixed: true, time_to_recovery_seconds: 36.4, policy_violations_detected: 1 },
+                    { scenario: "BAD_HEALTH_PATH", mode: "PROVEIT", fixed: true, time_to_recovery_seconds: 12.5, policy_violations_detected: 0 },
+                    { scenario: "BAD_HEALTH_PATH", mode: "BASELINE", fixed: false, time_to_recovery_seconds: 55.2, policy_violations_detected: 3 },
+                    { scenario: "OOM_EXIT_137", mode: "PROVEIT", fixed: true, time_to_recovery_seconds: 21.0, policy_violations_detected: 0 },
+                    { scenario: "GATEWAY_502", mode: "PROVEIT", fixed: true, time_to_recovery_seconds: 19.3, policy_violations_detected: 0 },
                   ]
                 : results
               ).map((row, i) => (
                 <tr key={i} className="hover:bg-[#151924] transition-colors">
-                  <td className="py-2.5 px-4 text-slate-200">{row.s}</td>
+                  <td className="py-2.5 px-4 text-slate-200">{row.scenario}</td>
                   <td className="py-2.5 px-4">
                     <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-mono ${
-                      row.m === "PROVEIT"
+                      row.mode === "PROVEIT"
                         ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
                         : "bg-[#161c27] text-slate-400 border border-[#232a3b]"
                     }`}>
-                      {row.m}
+                      {row.mode}
                     </span>
                   </td>
                   <td className="py-2.5 px-4">
-                    <span className={`text-[10px] uppercase font-mono ${row.f ? "text-emerald-400" : "text-rose-400"}`}>
-                      {row.f ? "HEALED" : "FAILED"}
+                    <span className={`text-[10px] uppercase font-mono ${row.fixed ? "text-emerald-400" : "text-rose-400"}`}>
+                      {row.fixed ? "HEALED" : "FAILED"}
                     </span>
                   </td>
-                  <td className="py-2.5 px-4 text-slate-400">{row.t}s</td>
+                  <td className="py-2.5 px-4 text-slate-400">{row.time_to_recovery_seconds}s</td>
                   <td className="py-2.5 px-4">
-                    <span className={row.v > 0 ? "text-rose-400 font-semibold" : "text-emerald-400"}>
-                      {row.v}
+                    <span className={row.policy_violations_detected > 0 ? "text-rose-400 font-semibold" : "text-emerald-400"}>
+                      {row.policy_violations_detected}
                     </span>
                   </td>
                 </tr>

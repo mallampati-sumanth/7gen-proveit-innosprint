@@ -5,7 +5,10 @@ from backend.app.entities.models import (
     Incident,
     Approval,
     LedgerEntry,
-    BenchmarkResult
+    BenchmarkResult,
+    RepoConfig,
+    RepoEnvVar,
+    EC2Instance,
 )
 
 __all__ = [
@@ -14,5 +17,8 @@ __all__ = [
     "Incident",
     "Approval",
     "LedgerEntry",
-    "BenchmarkResult"
+    "BenchmarkResult",
+    "RepoConfig",
+    "RepoEnvVar",
+    "EC2Instance",
 ]

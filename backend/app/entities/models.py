@@ -13,6 +13,9 @@ class Run(SQLModel, table=True):
     status: str = Field(default="PENDING")  # PENDING, RUNNING, HEALED, ESCALATED, FAILED
     prompt: str
     target_repo: Optional[str] = None
+    target_ec2: Optional[str] = None
+    environment: str = Field(default="production")
+    injected_env_json: Optional[str] = Field(default="{}")
     cloud_mode: str = Field(default="mock")
     created_at: datetime = Field(default_factory=get_utc_now)
     updated_at: datetime = Field(default_factory=get_utc_now)
@@ -73,3 +76,75 @@ class BenchmarkResult(SQLModel, table=True):
     policy_violations_detected: int
     error_message: Optional[str] = None
     created_at: datetime = Field(default_factory=get_utc_now)
+
+
+class RepoConfig(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    repo_id: str = Field(index=True, unique=True)  # e.g. "7gen/react-dashboard"
+    repo_name: str
+    owner: str = Field(default="7gen")
+    description: Optional[str] = None
+    clone_url: Optional[str] = None
+    default_branch: str = Field(default="main")
+    language: str = Field(default="TypeScript")
+    framework: Optional[str] = Field(default="Next.js 14")
+    default_port: int = Field(default=3000)
+    healthcheck_path: str = Field(default="/health")
+    is_connected: bool = Field(default=True)
+    last_deployed_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=get_utc_now)
+    updated_at: datetime = Field(default_factory=get_utc_now)
+
+
+class RepoEnvVar(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    repo_id: str = Field(index=True)  # links to RepoConfig.repo_id
+    environment: str = Field(default="production", index=True)  # development | staging | production
+    key: str = Field(index=True)
+    value: str
+    category: str = Field(default="APP")  # APP | DATABASE | AWS | AUTH | LOGS | THIRD_PARTY
+    is_secret: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=get_utc_now)
+    updated_at: datetime = Field(default_factory=get_utc_now)
+
+
+class EC2Instance(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    instance_id: str = Field(index=True, unique=True)  # e.g. "i-09ab12cd34ef56"
+    name: str = Field(default="Production EC2 Node")
+    public_ip: str = Field(default="54.210.14.88")
+    private_ip: Optional[str] = Field(default="10.0.1.42")
+    region: str = Field(default="us-east-1")
+    instance_type: str = Field(default="t3.small")
+    state: str = Field(default="running")  # running | stopped | provisioning | error
+    ssh_user: str = Field(default="ubuntu")
+    auth_method: str = Field(default="ssh_key")  # ssh_key | ssm | password
+    ssh_port: int = Field(default=22)
+    docker_installed: bool = Field(default=True)
+    docker_version: Optional[str] = Field(default="Docker v26.1.4, compose v2.27.0")
+    deployed_containers_count: int = Field(default=1)
+    deployed_apps_json: Optional[str] = Field(default="[]")
+    last_ping_status: str = Field(default="HEALTHY")
+    last_ping_latency_ms: float = Field(default=18.4)
+    last_ping_at: Optional[datetime] = Field(default_factory=get_utc_now)
+    created_at: datetime = Field(default_factory=get_utc_now)
+    updated_at: datetime = Field(default_factory=get_utc_now)
+
+
+class User(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: str = Field(index=True, unique=True)
+    email: str = Field(index=True, unique=True)
+    username: str = Field(index=True, unique=True)
+    name: Optional[str] = Field(default=None)
+    hashed_password: Optional[str] = Field(default=None)
+    salt: Optional[str] = Field(default=None)
+    auth_provider: str = Field(default="email")  # email | github
+    github_id: Optional[str] = Field(default=None, index=True)
+    github_username: Optional[str] = Field(default=None)
+    avatar_url: Optional[str] = Field(default=None)
+    is_active: bool = Field(default=True)
+    is_admin: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=get_utc_now)
+    updated_at: datetime = Field(default_factory=get_utc_now)
+
