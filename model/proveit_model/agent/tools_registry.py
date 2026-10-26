@@ -52,6 +52,27 @@ def get_agent_tools_definitions() -> List[ToolDefinition]:
             }
         ),
         ToolDefinition(
+            name="provision_new_ec2_instance",
+            description="Launches and provisions a new AWS EC2 compute instance with Docker Engine pre-configured in the user's AWS account.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Name tag for the EC2 node, e.g. 'Production App Host'"
+                    },
+                    "instance_type": {
+                        "type": "string",
+                        "description": "EC2 instance type, e.g. 't3.small' or 't3.micro'"
+                    },
+                    "region": {
+                        "type": "string",
+                        "description": "AWS region, e.g. 'us-east-1'"
+                    }
+                }
+            }
+        ),
+        ToolDefinition(
             name="list_ec2_instances",
             description="Discovers active EC2 compute instances in the AWS region with their public IPs, instance types, and Docker daemon status.",
             parameters={
@@ -263,6 +284,15 @@ class ToolExecutor:
                     "preview": masked_env,
                     "checksum": hashlib.md5(json.dumps(injected_env, sort_keys=True).encode()).hexdigest(),
                 }
+
+            elif tool_name == "provision_new_ec2_instance":
+                name = arguments.get("name") or f"Production Node ({context.get('target_repo', 'app').split('/')[-1]})"
+                inst_type = arguments.get("instance_type", "t3.small")
+                reg = arguments.get("region", "us-east-1")
+                res = self.aws.provision_new_ec2_instance(name=name, instance_type=inst_type, region=reg)
+                context["ec2_id"] = res.get("instance_id")
+                context["ec2_ip"] = res.get("public_ip")
+                return res
 
             elif tool_name == "list_ec2_instances":
                 instances = self.aws.describe_ec2_instances()

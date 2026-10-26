@@ -210,26 +210,30 @@ Execute your full autonomous pipeline using your tools. Inspect the repo, inject
                     if len(obs_content) > 1500:
                         obs_content = obs_content[:1500] + "...}"
 
-                    messages.append(AgentMessage(
-                        role="tool",
-                        tool_call_id=tc.id,
-                        content=obs_content,
-                    ))
+                # Update context if a new EC2 instance was provisioned via LLM tool call
+                if tool_name == "provision_new_ec2_instance" and isinstance(result, dict):
+                    ec2_id = result.get("instance_id", ec2_id)
+                    ec2_ip = result.get("public_ip", ec2_ip)
+                    context["ec2_id"] = ec2_id
+                    context["ec2_ip"] = ec2_ip
+                    context["app_url"] = f"http://{ec2_ip}:{context.get('port', 3000)}"
 
             else:
                 # If LLM didn't return tool calls on this turn:
                 # Check what critical actions are remaining and execute autonomously
-                remaining_tools = [
-                    t for t in [
-                        "inspect_repository",
-                        "inject_repo_environment",
-                        "connect_to_ec2_instance",
-                        "evaluate_blast_radius",
-                        "deploy_to_ec2_instance",
-                        "verify_ec2_health_probe",
-                        "commit_to_proof_ledger",
-                    ] if t not in executed_tools
-                ]
+                need_provision = "NEW" in str(ec2_target).upper() or "PROVISION" in str(ec2_target).upper() or "NEW" in str(prompt).upper()
+                pipeline = ["inspect_repository", "inject_repo_environment"]
+                if need_provision:
+                    pipeline.append("provision_new_ec2_instance")
+                pipeline.extend([
+                    "connect_to_ec2_instance",
+                    "evaluate_blast_radius",
+                    "deploy_to_ec2_instance",
+                    "verify_ec2_health_probe",
+                    "commit_to_proof_ledger",
+                ])
+
+                remaining_tools = [t for t in pipeline if t not in executed_tools]
 
                 if not remaining_tools or context.get("completed"):
                     break
@@ -244,6 +248,8 @@ Execute your full autonomous pipeline using your tools. Inspect the repo, inject
                     args = {"repo_url": repo_clean, "branch": "main"}
                 elif next_tool == "inject_repo_environment":
                     args = {"repo": repo_clean, "environment": environment}
+                elif next_tool == "provision_new_ec2_instance":
+                    args = {"name": f"Production Node ({repo_clean.split('/')[-1]})", "instance_type": "t3.small", "region": self.aws.region}
                 elif next_tool == "connect_to_ec2_instance":
                     args = {"instance_id": ec2_id, "public_ip": ec2_ip}
                 elif next_tool == "evaluate_blast_radius":
@@ -264,6 +270,14 @@ Execute your full autonomous pipeline using your tools. Inspect the repo, inject
                 }
 
                 result = await self.executor.execute_tool(next_tool, args, context)
+
+                # If new EC2 instance was provisioned, update local ec2_id, ec2_ip and context
+                if next_tool == "provision_new_ec2_instance" and isinstance(result, dict):
+                    ec2_id = result.get("instance_id", ec2_id)
+                    ec2_ip = result.get("public_ip", ec2_ip)
+                    context["ec2_id"] = ec2_id
+                    context["ec2_ip"] = ec2_ip
+                    context["app_url"] = f"http://{ec2_ip}:{context.get('port', 3000)}"
 
                 yield {
                     "type": "TOOL_RESULT",

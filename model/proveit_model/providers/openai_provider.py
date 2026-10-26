@@ -1,5 +1,6 @@
 import json
 import logging
+import asyncio
 from typing import List, Optional, Dict, Any
 from proveit_model.providers.base import BaseLLMProvider, AgentMessage, ToolDefinition, ToolCall
 
@@ -69,6 +70,7 @@ class OpenAIProvider(BaseLLMProvider):
                 kwargs: Dict[str, Any] = {
                     "model": self.model_name,
                     "messages": formatted_msgs,
+                    "max_tokens": 800,
                 }
 
                 if tools:
@@ -85,7 +87,7 @@ class OpenAIProvider(BaseLLMProvider):
                     kwargs["tools"] = openai_tools
                     kwargs["tool_choice"] = "auto"
 
-                resp = self.client.chat.completions.create(**kwargs)
+                resp = await asyncio.to_thread(self.client.chat.completions.create, **kwargs)
                 choice = resp.choices[0].message
 
                 tool_calls = None
