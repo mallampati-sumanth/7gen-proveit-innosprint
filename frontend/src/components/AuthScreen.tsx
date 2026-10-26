@@ -35,22 +35,38 @@ export const AuthScreen: React.FC = () => {
     setTab(nextTab);
   };
 
+  const handleDemoAdmin = async () => {
+    const ok = await loginAsDemoAdmin();
+    if (ok) {
+      window.location.href = "/console";
+    }
+  };
+
   const submitLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginIdentifier || !loginPassword) return;
-    await loginWithEmail(loginIdentifier, loginPassword);
+    const ok = await loginWithEmail(loginIdentifier, loginPassword);
+    if (ok) {
+      window.location.href = "/console";
+    }
   };
 
   const submitRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regEmail || !regUsername || !regPassword) return;
-    await registerWithEmail(regEmail, regUsername, regPassword, regName);
+    const ok = await registerWithEmail(regEmail, regUsername, regPassword, regName);
+    if (ok) {
+      window.location.href = "/console";
+    }
   };
 
   const submitGitHubToken = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ghToken) return;
-    await loginWithGitHubToken(ghToken);
+    const ok = await loginWithGitHubToken(ghToken);
+    if (ok) {
+      window.location.href = "/console";
+    }
   };
 
   return (
@@ -59,111 +75,151 @@ export const AuthScreen: React.FC = () => {
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      background: "radial-gradient(ellipse at top, #1a1512 0%, #0d0f12 70%)",
-      padding: "24px 16px",
-      fontFamily: "'Inter', sans-serif",
-      color: "var(--text-1, #f1f5f9)",
+      background: "radial-gradient(ellipse 75% 55% at 50% 30%, rgba(22, 163, 74, 0.05), transparent 70%), #ffffff",
+      padding: "32px 16px",
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      color: "#0a0a0a",
     }}>
       <div style={{
         width: "100%",
-        maxWidth: 480,
-        background: "rgba(18, 20, 26, 0.95)",
-        border: "1px solid rgba(249, 115, 22, 0.25)",
-        borderRadius: 18,
-        boxShadow: "0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 40px rgba(249, 115, 22, 0.08)",
-        backdropFilter: "blur(20px)",
+        maxWidth: 460,
+        background: "#ffffff",
+        border: "1px solid #e5e5e5",
+        borderRadius: 20,
+        boxShadow: "0 20px 50px -12px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04)",
         padding: "36px 32px 30px",
         display: "flex",
         flexDirection: "column",
-        gap: 22,
+        gap: 20,
       }}>
+        {/* Navigation & Brand Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
+          <a
+            href="/"
+            style={{
+              fontSize: 18,
+              fontWeight: 700,
+              color: "#0a0a0a",
+              textDecoration: "none",
+              letterSpacing: "-.03em",
+            }}
+          >
+            prove<span style={{ color: "#16a34a" }}>it</span>
+          </a>
+          <a
+            href="/"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              fontSize: 12.5,
+              color: "#71717a",
+              textDecoration: "none",
+              fontWeight: 500,
+              transition: "color .18s",
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = "#16a34a")}
+            onMouseLeave={e => (e.currentTarget.style.color = "#71717a")}
+          >
+            ← Back to Landing
+          </a>
+        </div>
+
         {/* Brand Header */}
         <div style={{ textAlign: "center" }}>
           <div style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: 8,
-            padding: "5px 14px",
-            borderRadius: 20,
-            background: "rgba(249, 115, 22, 0.12)",
-            border: "1px solid rgba(249, 115, 22, 0.3)",
-            fontSize: 12,
-            fontWeight: 700,
-            color: "#f97316",
+            gap: 7,
+            padding: "4px 12px",
+            borderRadius: 980,
+            background: "rgba(22, 163, 74, 0.08)",
+            border: "1px solid rgba(22, 163, 74, 0.22)",
+            fontSize: 11,
+            fontWeight: 600,
+            color: "#16a34a",
             marginBottom: 14,
-            letterSpacing: ".04em",
+            letterSpacing: ".06em",
           }}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#f97316", display: "inline-block", boxShadow: "0 0 10px #f97316" }} />
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#16a34a", display: "inline-block" }} />
             AUTHENTICATION REQUIRED
           </div>
 
           <h1 style={{
-            fontSize: 26,
-            fontWeight: 800,
-            letterSpacing: "-.02em",
+            fontSize: 24,
+            fontWeight: 700,
+            letterSpacing: "-.03em",
             margin: "0 0 6px",
-            background: "linear-gradient(135deg, #ffffff 40%, #fdba74 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
+            color: "#0a0a0a",
           }}>
             ProveIt Cloud Console
           </h1>
-          <p style={{ fontSize: 13, color: "#94a3b8", margin: 0, lineHeight: 1.5 }}>
-            Autonomous AWS EC2 Deployment & Deterministic Proof Engine. Sign in to access your cloud infrastructure.
+          <p style={{ fontSize: 13, color: "#71717a", margin: 0, lineHeight: 1.55 }}>
+            Autonomous AWS EC2 Deployment &amp; Deterministic Proof Engine. Sign in to access your cloud infrastructure.
           </p>
         </div>
 
         {/* 1-Click Demo Admin Button */}
         <button
           type="button"
-          onClick={() => loginAsDemoAdmin()}
+          onClick={handleDemoAdmin}
           disabled={loading}
           style={{
             width: "100%",
-            padding: "11px 16px",
-            borderRadius: 10,
-            border: "1px solid rgba(249, 115, 22, 0.4)",
-            background: "linear-gradient(135deg, rgba(249,115,22,0.2) 0%, rgba(180,83,9,0.25) 100%)",
-            color: "#fdba74",
-            fontSize: 13,
-            fontWeight: 700,
+            padding: "11px 18px",
+            borderRadius: 980,
+            border: "none",
+            background: "#16a34a",
+            color: "#ffffff",
+            fontSize: 13.5,
+            fontWeight: 600,
             cursor: loading ? "not-allowed" : "pointer",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             gap: 8,
-            transition: "all .15s ease",
+            boxShadow: "0 4px 14px rgba(22, 163, 74, 0.28)",
+            transition: "all .18s ease",
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLElement).style.background = "#15803d";
+            (e.currentTarget as HTMLElement).style.transform = "scale(1.01)";
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.background = "#16a34a";
+            (e.currentTarget as HTMLElement).style.transform = "none";
           }}
         >
-          ⚡ 1-Click Sign In as Demo Admin
+           1-Click Sign In as Demo Admin
         </button>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ flex: 1, height: 1, background: "rgba(255, 255, 255, 0.08)" }} />
-          <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600, textTransform: "uppercase" }}>or continue with</span>
-          <div style={{ flex: 1, height: 1, background: "rgba(255, 255, 255, 0.08)" }} />
+          <div style={{ flex: 1, height: 1, background: "#e5e5e5" }} />
+          <span style={{ fontSize: 10.5, color: "#71717a", fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase" }}>or continue with</span>
+          <div style={{ flex: 1, height: 1, background: "#e5e5e5" }} />
         </div>
 
         {/* Auth Mode Tabs */}
         <div style={{
           display: "flex",
-          background: "rgba(10, 12, 16, 0.7)",
-          padding: 4,
+          background: "#f4f4f5",
+          padding: 3,
           borderRadius: 10,
-          border: "1px solid rgba(255, 255, 255, 0.06)",
+          border: "1px solid #e5e5e5",
         }}>
           <button
             type="button"
             onClick={() => handleTabChange("signin")}
             style={{
               flex: 1,
-              padding: "8px 0",
+              padding: "7px 0",
               borderRadius: 8,
               border: "none",
-              background: tab === "signin" ? "#f97316" : "transparent",
-              color: tab === "signin" ? "#ffffff" : "#94a3b8",
+              background: tab === "signin" ? "#ffffff" : "transparent",
+              color: tab === "signin" ? "#0a0a0a" : "#71717a",
+              boxShadow: tab === "signin" ? "0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04)" : "none",
               fontSize: 12.5,
-              fontWeight: 700,
+              fontWeight: 600,
               cursor: "pointer",
               transition: "all .15s ease",
             }}
@@ -175,13 +231,14 @@ export const AuthScreen: React.FC = () => {
             onClick={() => handleTabChange("register")}
             style={{
               flex: 1,
-              padding: "8px 0",
+              padding: "7px 0",
               borderRadius: 8,
               border: "none",
-              background: tab === "register" ? "#f97316" : "transparent",
-              color: tab === "register" ? "#ffffff" : "#94a3b8",
+              background: tab === "register" ? "#ffffff" : "transparent",
+              color: tab === "register" ? "#0a0a0a" : "#71717a",
+              boxShadow: tab === "register" ? "0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04)" : "none",
               fontSize: 12.5,
-              fontWeight: 700,
+              fontWeight: 600,
               cursor: "pointer",
               transition: "all .15s ease",
             }}
@@ -193,13 +250,14 @@ export const AuthScreen: React.FC = () => {
             onClick={() => handleTabChange("github")}
             style={{
               flex: 1,
-              padding: "8px 0",
+              padding: "7px 0",
               borderRadius: 8,
               border: "none",
-              background: tab === "github" ? "#f97316" : "transparent",
-              color: tab === "github" ? "#ffffff" : "#94a3b8",
+              background: tab === "github" ? "#ffffff" : "transparent",
+              color: tab === "github" ? "#0a0a0a" : "#71717a",
+              boxShadow: tab === "github" ? "0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04)" : "none",
               fontSize: 12.5,
-              fontWeight: 700,
+              fontWeight: 600,
               cursor: "pointer",
               transition: "all .15s ease",
             }}
@@ -212,10 +270,10 @@ export const AuthScreen: React.FC = () => {
         {error && (
           <div style={{
             padding: "10px 14px",
-            borderRadius: 8,
-            background: "rgba(239, 68, 68, 0.12)",
-            border: "1px solid rgba(239, 68, 68, 0.35)",
-            color: "#fca5a5",
+            borderRadius: 9,
+            background: "rgba(220, 38, 38, 0.08)",
+            border: "1px solid rgba(220, 38, 38, 0.25)",
+            color: "#dc2626",
             fontSize: 12.5,
             lineHeight: 1.4,
           }}>
@@ -227,7 +285,7 @@ export const AuthScreen: React.FC = () => {
         {tab === "signin" && (
           <form onSubmit={submitLogin} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 6 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#0a0a0a", marginBottom: 6 }}>
                 Username or Email Address
               </label>
               <input
@@ -239,19 +297,28 @@ export const AuthScreen: React.FC = () => {
                 style={{
                   width: "100%",
                   padding: "10px 14px",
-                  borderRadius: 8,
-                  background: "rgba(10, 12, 16, 0.8)",
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
-                  color: "#ffffff",
+                  borderRadius: 10,
+                  background: "#ffffff",
+                  border: "1.5px solid #e5e5e5",
+                  color: "#0a0a0a",
                   fontSize: 13,
                   outline: "none",
                   boxSizing: "border-box",
+                  transition: "border-color .15s, box-shadow .15s",
+                }}
+                onFocus={e => {
+                  e.currentTarget.style.borderColor = "#16a34a";
+                  e.currentTarget.style.boxShadow = "0 0 0 3px rgba(22, 163, 74, 0.12)";
+                }}
+                onBlur={e => {
+                  e.currentTarget.style.borderColor = "#e5e5e5";
+                  e.currentTarget.style.boxShadow = "none";
                 }}
               />
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 6 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#0a0a0a", marginBottom: 6 }}>
                 Password
               </label>
               <input
@@ -263,13 +330,22 @@ export const AuthScreen: React.FC = () => {
                 style={{
                   width: "100%",
                   padding: "10px 14px",
-                  borderRadius: 8,
-                  background: "rgba(10, 12, 16, 0.8)",
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
-                  color: "#ffffff",
+                  borderRadius: 10,
+                  background: "#ffffff",
+                  border: "1.5px solid #e5e5e5",
+                  color: "#0a0a0a",
                   fontSize: 13,
                   outline: "none",
                   boxSizing: "border-box",
+                  transition: "border-color .15s, box-shadow .15s",
+                }}
+                onFocus={e => {
+                  e.currentTarget.style.borderColor = "#16a34a";
+                  e.currentTarget.style.boxShadow = "0 0 0 3px rgba(22, 163, 74, 0.12)";
+                }}
+                onBlur={e => {
+                  e.currentTarget.style.borderColor = "#e5e5e5";
+                  e.currentTarget.style.boxShadow = "none";
                 }}
               />
             </div>
@@ -280,14 +356,23 @@ export const AuthScreen: React.FC = () => {
               style={{
                 marginTop: 6,
                 padding: "11px",
-                borderRadius: 8,
+                borderRadius: 980,
                 border: "none",
-                background: "#f97316",
+                background: "#0a0a0a",
                 color: "#ffffff",
                 fontSize: 13.5,
-                fontWeight: 700,
+                fontWeight: 600,
                 cursor: loading ? "not-allowed" : "pointer",
-                boxShadow: "0 4px 15px rgba(249, 115, 22, 0.3)",
+                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.12)",
+                transition: "background .15s, transform .15s",
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.background = "#262626";
+                (e.currentTarget as HTMLElement).style.transform = "scale(1.01)";
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.background = "#0a0a0a";
+                (e.currentTarget as HTMLElement).style.transform = "none";
               }}
             >
               {loading ? "Authenticating…" : "Sign In to Console"}
@@ -299,7 +384,7 @@ export const AuthScreen: React.FC = () => {
         {tab === "register" && (
           <form onSubmit={submitRegister} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 5 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#0a0a0a", marginBottom: 5 }}>
                 Email Address
               </label>
               <input
@@ -311,20 +396,28 @@ export const AuthScreen: React.FC = () => {
                 style={{
                   width: "100%",
                   padding: "9px 13px",
-                  borderRadius: 8,
-                  background: "rgba(10, 12, 16, 0.8)",
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
-                  color: "#ffffff",
+                  borderRadius: 10,
+                  background: "#ffffff",
+                  border: "1.5px solid #e5e5e5",
+                  color: "#0a0a0a",
                   fontSize: 13,
                   outline: "none",
                   boxSizing: "border-box",
+                }}
+                onFocus={e => {
+                  e.currentTarget.style.borderColor = "#16a34a";
+                  e.currentTarget.style.boxShadow = "0 0 0 3px rgba(22, 163, 74, 0.12)";
+                }}
+                onBlur={e => {
+                  e.currentTarget.style.borderColor = "#e5e5e5";
+                  e.currentTarget.style.boxShadow = "none";
                 }}
               />
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 5 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#0a0a0a", marginBottom: 5 }}>
                   Username
                 </label>
                 <input
@@ -336,19 +429,27 @@ export const AuthScreen: React.FC = () => {
                   style={{
                     width: "100%",
                     padding: "9px 13px",
-                    borderRadius: 8,
-                    background: "rgba(10, 12, 16, 0.8)",
-                    border: "1px solid rgba(255, 255, 255, 0.12)",
-                    color: "#ffffff",
+                    borderRadius: 10,
+                    background: "#ffffff",
+                    border: "1.5px solid #e5e5e5",
+                    color: "#0a0a0a",
                     fontSize: 13,
                     outline: "none",
                     boxSizing: "border-box",
+                  }}
+                  onFocus={e => {
+                    e.currentTarget.style.borderColor = "#16a34a";
+                    e.currentTarget.style.boxShadow = "0 0 0 3px rgba(22, 163, 74, 0.12)";
+                  }}
+                  onBlur={e => {
+                    e.currentTarget.style.borderColor = "#e5e5e5";
+                    e.currentTarget.style.boxShadow = "none";
                   }}
                 />
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 5 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#0a0a0a", marginBottom: 5 }}>
                   Full Name (Optional)
                 </label>
                 <input
@@ -359,20 +460,28 @@ export const AuthScreen: React.FC = () => {
                   style={{
                     width: "100%",
                     padding: "9px 13px",
-                    borderRadius: 8,
-                    background: "rgba(10, 12, 16, 0.8)",
-                    border: "1px solid rgba(255, 255, 255, 0.12)",
-                    color: "#ffffff",
+                    borderRadius: 10,
+                    background: "#ffffff",
+                    border: "1.5px solid #e5e5e5",
+                    color: "#0a0a0a",
                     fontSize: 13,
                     outline: "none",
                     boxSizing: "border-box",
+                  }}
+                  onFocus={e => {
+                    e.currentTarget.style.borderColor = "#16a34a";
+                    e.currentTarget.style.boxShadow = "0 0 0 3px rgba(22, 163, 74, 0.12)";
+                  }}
+                  onBlur={e => {
+                    e.currentTarget.style.borderColor = "#e5e5e5";
+                    e.currentTarget.style.boxShadow = "none";
                   }}
                 />
               </div>
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 5 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#0a0a0a", marginBottom: 5 }}>
                 Password (min 6 characters)
               </label>
               <input
@@ -385,13 +494,21 @@ export const AuthScreen: React.FC = () => {
                 style={{
                   width: "100%",
                   padding: "9px 13px",
-                  borderRadius: 8,
-                  background: "rgba(10, 12, 16, 0.8)",
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
-                  color: "#ffffff",
+                  borderRadius: 10,
+                  background: "#ffffff",
+                  border: "1.5px solid #e5e5e5",
+                  color: "#0a0a0a",
                   fontSize: 13,
                   outline: "none",
                   boxSizing: "border-box",
+                }}
+                onFocus={e => {
+                  e.currentTarget.style.borderColor = "#16a34a";
+                  e.currentTarget.style.boxShadow = "0 0 0 3px rgba(22, 163, 74, 0.12)";
+                }}
+                onBlur={e => {
+                  e.currentTarget.style.borderColor = "#e5e5e5";
+                  e.currentTarget.style.boxShadow = "none";
                 }}
               />
             </div>
@@ -402,14 +519,23 @@ export const AuthScreen: React.FC = () => {
               style={{
                 marginTop: 6,
                 padding: "11px",
-                borderRadius: 8,
+                borderRadius: 980,
                 border: "none",
-                background: "#f97316",
+                background: "#0a0a0a",
                 color: "#ffffff",
                 fontSize: 13.5,
-                fontWeight: 700,
+                fontWeight: 600,
                 cursor: loading ? "not-allowed" : "pointer",
-                boxShadow: "0 4px 15px rgba(249, 115, 22, 0.3)",
+                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.12)",
+                transition: "background .15s, transform .15s",
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.background = "#262626";
+                (e.currentTarget as HTMLElement).style.transform = "scale(1.01)";
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.background = "#0a0a0a";
+                (e.currentTarget as HTMLElement).style.transform = "none";
               }}
             >
               {loading ? "Creating Account…" : "Register & Sign In"}
@@ -428,17 +554,28 @@ export const AuthScreen: React.FC = () => {
               style={{
                 width: "100%",
                 padding: "11px",
-                borderRadius: 8,
-                border: "1px solid rgba(255, 255, 255, 0.15)",
-                background: "#24292e",
-                color: "#ffffff",
+                borderRadius: 980,
+                border: "1.5px solid #e5e5e5",
+                background: "#ffffff",
+                color: "#0a0a0a",
                 fontSize: 13,
-                fontWeight: 700,
+                fontWeight: 600,
                 cursor: loading ? "not-allowed" : "pointer",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 9,
+                transition: "all .18s ease",
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.background = "#fafafa";
+                (e.currentTarget as HTMLElement).style.borderColor = "#a3a3a3";
+                (e.currentTarget as HTMLElement).style.transform = "scale(1.01)";
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.background = "#ffffff";
+                (e.currentTarget as HTMLElement).style.borderColor = "#e5e5e5";
+                (e.currentTarget as HTMLElement).style.transform = "none";
               }}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -448,15 +585,15 @@ export const AuthScreen: React.FC = () => {
             </button>
 
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ flex: 1, height: 1, background: "rgba(255, 255, 255, 0.08)" }} />
-              <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>OR CONNECT WITH ACCESS TOKEN</span>
-              <div style={{ flex: 1, height: 1, background: "rgba(255, 255, 255, 0.08)" }} />
+              <div style={{ flex: 1, height: 1, background: "#e5e5e5" }} />
+              <span style={{ fontSize: 10.5, color: "#71717a", fontWeight: 600, letterSpacing: ".04em" }}>OR CONNECT WITH ACCESS TOKEN</span>
+              <div style={{ flex: 1, height: 1, background: "#e5e5e5" }} />
             </div>
 
             {/* Token Form */}
             <form onSubmit={submitGitHubToken} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 6 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#0a0a0a", marginBottom: 6 }}>
                   GitHub Personal Access Token (classic or fine-grained)
                 </label>
                 <input
@@ -468,18 +605,26 @@ export const AuthScreen: React.FC = () => {
                   style={{
                     width: "100%",
                     padding: "10px 14px",
-                    borderRadius: 8,
-                    background: "rgba(10, 12, 16, 0.8)",
-                    border: "1px solid rgba(255, 255, 255, 0.12)",
-                    color: "#ffffff",
+                    borderRadius: 10,
+                    background: "#ffffff",
+                    border: "1.5px solid #e5e5e5",
+                    color: "#0a0a0a",
                     fontSize: 13,
                     fontFamily: "JetBrains Mono, monospace",
                     outline: "none",
                     boxSizing: "border-box",
                   }}
+                  onFocus={e => {
+                    e.currentTarget.style.borderColor = "#16a34a";
+                    e.currentTarget.style.boxShadow = "0 0 0 3px rgba(22, 163, 74, 0.12)";
+                  }}
+                  onBlur={e => {
+                    e.currentTarget.style.borderColor = "#e5e5e5";
+                    e.currentTarget.style.boxShadow = "none";
+                  }}
                 />
-                <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
-                  Requires <code>repo</code> and <code>read:user</code> scopes to clone repos and deploy to EC2.
+                <div style={{ fontSize: 11, color: "#71717a", marginTop: 4 }}>
+                  Requires <code style={{ background: "#f4f4f5", padding: "1px 5px", borderRadius: 4, color: "#0a0a0a" }}>repo</code> and <code style={{ background: "#f4f4f5", padding: "1px 5px", borderRadius: 4, color: "#0a0a0a" }}>read:user</code> scopes to clone repos and deploy to EC2.
                 </div>
               </div>
 
@@ -488,13 +633,14 @@ export const AuthScreen: React.FC = () => {
                 disabled={loading}
                 style={{
                   padding: "10px",
-                  borderRadius: 8,
+                  borderRadius: 980,
                   border: "none",
-                  background: "#f97316",
+                  background: "#0a0a0a",
                   color: "#ffffff",
                   fontSize: 13,
-                  fontWeight: 700,
+                  fontWeight: 600,
                   cursor: loading ? "not-allowed" : "pointer",
+                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.12)",
                 }}
               >
                 {loading ? "Verifying with GitHub…" : "Sign In with GitHub Token"}
@@ -505,16 +651,16 @@ export const AuthScreen: React.FC = () => {
 
         {/* Footer Security Badge */}
         <div style={{
-          marginTop: 10,
+          marginTop: 6,
           paddingTop: 16,
-          borderTop: "1px solid rgba(255, 255, 255, 0.06)",
+          borderTop: "1px solid #f0f0f0",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           fontSize: 11,
-          color: "#64748b",
+          color: "#a3a3a3",
         }}>
-          <span>🔒 AES-256 JWT Signed Sessions</span>
+          <span>AES-256 JWT Signed Sessions</span>
           <span>AWS Hackathon 2026 · 7th Gen</span>
         </div>
       </div>

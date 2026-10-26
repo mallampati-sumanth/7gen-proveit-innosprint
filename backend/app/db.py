@@ -35,17 +35,34 @@ def init_db() -> None:
 
     SQLModel.metadata.create_all(engine)
 
-    # Auto-migrate new VoiceOps columns into PostgreSQL "user" table if not already present
+    # Auto-migrate new VoiceOps columns into "user" table if not already present
     with engine.connect() as conn:
-        try:
-            from sqlalchemy import text
-            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS phone_number VARCHAR;'))
-            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN DEFAULT FALSE;'))
-            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS voice_pin VARCHAR DEFAULT \'1234\';'))
-            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS voice_enabled BOOLEAN DEFAULT TRUE;'))
-            conn.commit()
-        except Exception as e:
-            pass
+        from sqlalchemy import text
+        if is_sqlite:
+            try:
+                res = conn.execute(text("PRAGMA table_info('user');"))
+                existing_cols = {row[1] for row in res.fetchall()}
+                cols_to_add = [
+                    ("phone_number", "VARCHAR"),
+                    ("phone_verified", "BOOLEAN DEFAULT 0"),
+                    ("voice_pin", "VARCHAR DEFAULT '1234'"),
+                    ("voice_enabled", "BOOLEAN DEFAULT 1"),
+                ]
+                for col_name, col_def in cols_to_add:
+                    if col_name not in existing_cols:
+                        conn.execute(text(f'ALTER TABLE "user" ADD COLUMN {col_name} {col_def};'))
+                conn.commit()
+            except Exception:
+                pass
+        else:
+            try:
+                conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS phone_number VARCHAR;'))
+                conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN DEFAULT FALSE;'))
+                conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS voice_pin VARCHAR DEFAULT \'1234\';'))
+                conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS voice_enabled BOOLEAN DEFAULT TRUE;'))
+                conn.commit()
+            except Exception:
+                pass
 
     with Session(engine) as session:
         # Seed Admin User if not exists

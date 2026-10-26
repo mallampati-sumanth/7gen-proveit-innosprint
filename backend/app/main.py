@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.config import settings
 from backend.app.db import init_db
-from backend.app.routers import health, auth, agent, voice
+from backend.app.routers import health, auth, agent, voice, settings as settings_router
 
 
 @asynccontextmanager
@@ -36,4 +36,5 @@ app.include_router(auth.router)
 app.include_router(agent.router)
 app.include_router(agent.benchmark_router)
 app.include_router(voice.router)
+app.include_router(settings_router.router)
 
