@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { setAuthToken } from "../lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -63,12 +64,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const userData = await res.json();
           setUser(userData);
           setToken(storedToken);
+          setAuthToken(storedToken);
         } else {
           // Token invalid or expired
           localStorage.removeItem("proveit_token");
           localStorage.removeItem("proveit_user");
           setUser(null);
           setToken(null);
+          setAuthToken("");
         }
       } catch (err) {
         console.warn("Failed to verify authentication session:", err);
@@ -84,6 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             is_admin: storedUser === "admin",
           });
           setToken(storedToken);
+          setAuthToken(storedToken);
         }
       } finally {
         setLoading(false);
@@ -95,6 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const saveAuthSession = (t: string, u: AuthUser) => {
     setToken(t);
+    setAuthToken(t);
     setUser(u);
     setError(null);
     if (typeof window !== "undefined") {
@@ -216,6 +221,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     setUser(null);
     setToken(null);
+    setAuthToken("");
     if (typeof window !== "undefined") {
       localStorage.removeItem("proveit_token");
       localStorage.removeItem("proveit_user");

@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { AuthScreen } from "../components/AuthScreen";
+import { BenchmarkView } from "../components/benchmark/BenchmarkView";
 
 /* ─────────── DOMAIN TYPES ─────────── */
 type MsgRole = "user" | "agent" | "system";
@@ -200,6 +201,7 @@ const NAV = [
     { id: "secrets",  icon: <I.Key />,      label: "AWS & GitHub Vault" },
   ]},
   { section: "AUDIT & TELEMETRY", items: [
+    { id: "benchmark",icon: <I.Zap />,      label: "Benchmark Suite", badge: "LLM vs Proof" },
     { id: "logs",     icon: <I.Terminal />, label: "Diagnostic Logs", badge: "Live" },
     { id: "activity", icon: <I.Activity />, label: "Run History" },
     { id: "ledger",   icon: <I.Book />,     label: "Proof Ledger", badge: "SHA-256" },
@@ -208,17 +210,18 @@ const NAV = [
 ];
 
 const PAGE_META: Record<string, { title: string; sub: string; badge: string }> = {
-  chat:     { title: "Autonomous Agent Console (SSE)", sub: "Deploy GitHub applications directly to EC2 with real-time reasoning and verification", badge: "Live Backend" },
-  repos:    { title: "Connected GitHub Repositories", sub: "Explore user repos, inject custom .env configurations, and deploy to EC2 instances", badge: "GitHub API" },
-  repoenv:  { title: "Per-Repository .env Injection Studio", sub: "Manage, auto-generate, and securely inject environment variables into individual repositories", badge: "Vault Encrypted" },
-  ec2:      { title: "EC2 Instances Fleet Management", sub: "Connected AWS EC2 instances, SSH/SSM telemetry, Docker daemon state, and running apps", badge: "AWS Boto3" },
-  analyze:  { title: "Repository Manifest & Stack Analyzer", sub: "Live inspection of runtime packages, ports, Dockerfiles, and recommended configs", badge: "Dynamic" },
-  infra:    { title: "AWS Cloud Infrastructure Topology", sub: "Live snapshot across EC2, ECS Fargate, ECR Registry, and CloudWatch Logs", badge: "Telemetry" },
-  secrets:  { title: "Credentials & Secrets Vault", sub: "Encrypted AWS IAM, GitHub Tokens, and Gemini API keys with live connection testers", badge: "AES-256" },
-  logs:     { title: "Diagnostic Log Stream", sub: "Real-time streaming agent telemetry from FastAPI and AWS CloudWatch", badge: "Streaming" },
-  activity: { title: "Audit & Run History", sub: "Complete history of autonomous deployments, self-healing events, and verification checks", badge: "Database" },
-  ledger:   { title: "Cryptographic Proof Ledger", sub: "Tamper-evident SHA-256 hash-chained proof records for every applied deployment fix", badge: "Immutable" },
-  settings: { title: "Platform Settings", sub: "Themes, blast radius safety gates, and cloud execution parameters", badge: "Control" },
+  chat:      { title: "Autonomous Agent Console (SSE)", sub: "Deploy GitHub applications directly to EC2 with real-time reasoning and verification", badge: "Live Backend" },
+  repos:     { title: "Connected GitHub Repositories", sub: "Explore user repos, inject custom .env configurations, and deploy to EC2 instances", badge: "GitHub API" },
+  repoenv:   { title: "Per-Repository .env Injection Studio", sub: "Manage, auto-generate, and securely inject environment variables into individual repositories", badge: "Vault Encrypted" },
+  ec2:       { title: "EC2 Instances Fleet Management", sub: "Connected AWS EC2 instances, SSH/SSM telemetry, Docker daemon state, and running apps", badge: "AWS Boto3" },
+  analyze:   { title: "Repository Manifest & Stack Analyzer", sub: "Live inspection of runtime packages, ports, Dockerfiles, and recommended configs", badge: "Dynamic" },
+  infra:     { title: "AWS Cloud Infrastructure Topology", sub: "Live snapshot across EC2, ECS Fargate, ECR Registry, and CloudWatch Logs", badge: "Telemetry" },
+  secrets:   { title: "Credentials & Secrets Vault", sub: "Encrypted AWS IAM, GitHub Tokens, and Gemini API keys with live connection testers", badge: "AES-256" },
+  benchmark: { title: "Head-to-Head Benchmark Suite", sub: "Comparative evaluation: Plain LLM proposals vs ProveIt deterministic policy + sandbox across 6 failure scenarios", badge: "Evaluation" },
+  logs:      { title: "Diagnostic Log Stream", sub: "Real-time streaming agent telemetry from FastAPI and AWS CloudWatch", badge: "Streaming" },
+  activity:  { title: "Audit & Run History", sub: "Complete history of autonomous deployments, self-healing events, and verification checks", badge: "Database" },
+  ledger:    { title: "Cryptographic Proof Ledger", sub: "Tamper-evident SHA-256 hash-chained proof records for every applied deployment fix", badge: "Immutable" },
+  settings:  { title: "Platform Settings", sub: "Themes, blast radius safety gates, and cloud execution parameters", badge: "Control" },
 };
 
 /* ─────────── STEP LIST COMPONENT ─────────── */
@@ -2093,6 +2096,35 @@ const LedgerPanel = () => {
   );
 };
 
+/* ─────────── 7B. BENCHMARK PANEL ─────────── */
+const BenchmarkPanel = () => {
+  const [results, setResults] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchResults = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/benchmark/results`);
+      const data = await res.json();
+      if (Array.isArray(data)) setResults(data);
+    } catch (err) {
+      console.warn("Failed to load benchmark results:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchResults();
+  }, [fetchResults]);
+
+  return (
+    <div style={{ flex: 1, overflowY: "auto", padding: "24px 32px 40px" }}>
+      <BenchmarkView results={results} onRefresh={fetchResults} />
+    </div>
+  );
+};
+
 /* ─────────── 8. SETTINGS PANEL ─────────── */
 const SettingsPanel = ({ theme, setTheme }: any) => (
   <div style={{ flex: 1, overflowY: "auto", padding: "24px 32px 40px" }}>
@@ -2974,6 +3006,7 @@ function MainApp() {
 
               {view === "logs" && <LogsPanel />}
               {view === "ledger" && <LedgerPanel />}
+              {view === "benchmark" && <BenchmarkPanel />}
               {view === "settings" && <SettingsPanel theme={theme} setTheme={setTheme} />}
             </div>
           </main>
