@@ -75,6 +75,15 @@ class Settings(BaseSettings):
     SENTRY_DSN: Optional[str] = None
     DATADOG_API_KEY: Optional[str] = None
 
+    # Sarvam AI Voice Agent & Telephony Settings
+    SARVAM_API_KEY: str = ""
+    SARVAM_VOICE_MODEL: str = "bulbul:v1"
+    SARVAM_SPEAKER: str = "meera"
+    SARVAM_STT_MODEL: str = "saaras:v1"
+    SARVAM_LANGUAGE_CODE: str = "en-IN"
+    TELEPHONY_AGENT_PHONE: str = "+91 80 4736 1820"
+    TELEPHONY_WEBHOOK_BASE_URL: Optional[str] = "http://localhost:8000"
+
     @field_validator("CORS_ORIGINS", "ALLOWED_REGIONS", "ALLOWED_INSTANCE_TYPES", mode="before")
     @classmethod
     def parse_json_list(cls, v):

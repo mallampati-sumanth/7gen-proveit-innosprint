@@ -145,6 +145,27 @@ class User(SQLModel, table=True):
     avatar_url: Optional[str] = Field(default=None)
     is_active: bool = Field(default=True)
     is_admin: bool = Field(default=False)
+    # VoiceOps Authentication & Sarvam AI Integration
+    phone_number: Optional[str] = Field(default=None, index=True)
+    phone_verified: bool = Field(default=False)
+    voice_pin: Optional[str] = Field(default="1234")
+    voice_enabled: bool = Field(default=True)
     created_at: datetime = Field(default_factory=get_utc_now)
     updated_at: datetime = Field(default_factory=get_utc_now)
+
+
+class VoiceCallLog(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    call_sid: str = Field(index=True, unique=True)
+    caller_phone: str = Field(index=True)
+    username: Optional[str] = Field(default=None, index=True)
+    pin_verified: bool = Field(default=False)
+    transcript: Optional[str] = Field(default=None)
+    intent: Optional[str] = Field(default="DEPLOY")
+    matched_repo: Optional[str] = Field(default=None)
+    deployment_run_id: Optional[str] = Field(default=None)
+    agent_response: Optional[str] = Field(default=None)
+    status: str = Field(default="COMPLETED")  # RINGING, AUTHENTICATED, COMPLETED, UNAUTHORIZED
+    created_at: datetime = Field(default_factory=get_utc_now)
+
 

@@ -26,6 +26,7 @@ def init_db() -> None:
         RepoEnvVar,
         EC2Instance,
         User,
+        VoiceCallLog,
     )
     import hashlib
     import secrets
@@ -33,6 +34,18 @@ def init_db() -> None:
     from sqlmodel import select
 
     SQLModel.metadata.create_all(engine)
+
+    # Auto-migrate new VoiceOps columns into PostgreSQL "user" table if not already present
+    with engine.connect() as conn:
+        try:
+            from sqlalchemy import text
+            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS phone_number VARCHAR;'))
+            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN DEFAULT FALSE;'))
+            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS voice_pin VARCHAR DEFAULT \'1234\';'))
+            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS voice_enabled BOOLEAN DEFAULT TRUE;'))
+            conn.commit()
+        except Exception as e:
+            pass
 
     with Session(engine) as session:
         # Seed Admin User if not exists
@@ -48,10 +61,21 @@ def init_db() -> None:
                 hashed_password=hashed,
                 salt=salt,
                 auth_provider="email",
+                phone_number="+919876543210",
+                phone_verified=True,
+                voice_pin="1234",
+                voice_enabled=True,
                 is_admin=True,
                 is_active=True,
             )
             session.add(admin)
+            session.commit()
+        elif not admin_user.phone_number:
+            admin_user.phone_number = "+919876543210"
+            admin_user.phone_verified = True
+            admin_user.voice_pin = "1234"
+            admin_user.voice_enabled = True
+            session.add(admin_user)
             session.commit()
 
         # Seed EC2 Fleet Instances if empty
