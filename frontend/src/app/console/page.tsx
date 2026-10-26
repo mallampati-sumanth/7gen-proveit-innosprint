@@ -673,6 +673,352 @@ const LoginModal = ({
   );
 };
 
+/* ─────────── 0C. EC2 PROVISIONING WIZARD MODAL ─────────── */
+const EC2ProvisionWizardModal = ({
+  open,
+  onClose,
+  context,
+  onProvisionSuccess,
+  onDeployNow,
+}: {
+  open: boolean;
+  onClose: () => void;
+  context?: {
+    name?: string;
+    target_repo?: string;
+    app_port?: number;
+    framework?: string;
+    instance_type?: string;
+    region?: string;
+  };
+  onProvisionSuccess: (newInst: any) => void;
+  onDeployNow?: (repo: string, instId: string) => void;
+}) => {
+  const [stage, setStage] = useState<"config" | "streaming" | "done">("config");
+  const [instanceName, setInstanceName] = useState("");
+  const [region, setRegion] = useState("us-east-1");
+  const [instanceType, setInstanceType] = useState("t3.micro");
+  const [appPort, setAppPort] = useState(5000);
+  const [customizing, setCustomizing] = useState(false);
+  const [streamLogs, setStreamLogs] = useState<any[]>([]);
+  const [currentStage, setCurrentStage] = useState(1);
+  const [provisionedInst, setProvisionedInst] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setStage("config");
+      setInstanceName(context?.name || `Host-${context?.target_repo?.split("/").pop() || "WebNode"}`);
+      setRegion(context?.region || "us-east-1");
+      setInstanceType(context?.instance_type || "t3.micro");
+      setAppPort(context?.app_port || 5000);
+      setCustomizing(false);
+      setStreamLogs([]);
+      setCurrentStage(1);
+      setProvisionedInst(null);
+      setError(null);
+    }
+  }, [open, context]);
+
+  if (!open) return null;
+
+  const handleStartProvision = async () => {
+    setError(null);
+    setStage("streaming");
+    setStreamLogs([
+      { stage: 1, title: "IAM & Security Group Verification", log: `Verifying or provisioning proveit-sandbox-sg (Port 22 & ${appPort})...`, status: "RUNNING", ts: "00:01" }
+    ]);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/ec2/provision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: instanceName,
+          instance_type: instanceType,
+          region: region,
+          app_port: appPort,
+          target_repo: context?.target_repo,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to initiate EC2 provisioning job.");
+      }
+
+      const data = await res.json();
+      const eventSource = new EventSource(`${API_BASE}${data.stream_url}`);
+
+      eventSource.onmessage = (e) => {
+        try {
+          const chunk = JSON.parse(e.data);
+          setCurrentStage(chunk.stage || 1);
+          setStreamLogs(prev => {
+            const filtered = prev.filter(p => p.stage !== chunk.stage);
+            return [...filtered, { ...chunk, ts: new Date().toLocaleTimeString().split(" ")[0] }];
+          });
+
+          if (chunk.stage === 5 && chunk.status === "COMPLETED") {
+            setProvisionedInst(chunk.instance);
+            setStage("done");
+            eventSource.close();
+            onProvisionSuccess(chunk.instance);
+          }
+        } catch {}
+      };
+
+      eventSource.onerror = () => {
+        eventSource.close();
+      };
+    } catch (err: any) {
+      setError(err.message || "Failed to launch EC2 instance.");
+      setStage("config");
+    }
+  };
+
+  const STAGES = [
+    { num: 1, label: "Security Group & IAM Check" },
+    { num: 2, label: "Boto3 API Dispatch" },
+    { num: 3, label: "IP Allocation & State Check" },
+    { num: 4, label: "Deploy Key & Docker Cloud-Init" },
+    { num: 5, label: "Fleet Registration" },
+  ];
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      zIndex: 1000, padding: 20, backdropFilter: "blur(4px)",
+    }}>
+      <div style={{
+        width: "100%", maxWidth: 620, background: "var(--bg-card)",
+        border: "1px solid var(--border)", borderRadius: 16,
+        padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16,
+        boxShadow: "0 20px 40px rgba(0,0,0,0.3)", maxHeight: "90vh", overflowY: "auto",
+      }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 16, fontWeight: 800, color: "var(--text-1)" }}>
+                {stage === "config" ? "⚡ Launch AWS EC2 Instance" : "⚡ AWS EC2 Boot-Up Audit Trail"}
+              </span>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: "rgba(22, 163, 74, 0.15)", color: "#16a34a", border: "1px solid rgba(22, 163, 74, 0.3)" }}>
+                AWS FREE TIER (t3.micro)
+              </span>
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
+              {stage === "config"
+                ? `Auto-sized from repo analysis (${context?.framework || "Web Service"}, Port ${appPort})`
+                : "Real-time SSE audit trail streaming cloud-init and host initialization"}
+            </div>
+          </div>
+          {stage !== "streaming" && (
+            <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-3)", cursor: "pointer" }}><I.X /></button>
+          )}
+        </div>
+
+        {error && (
+          <div style={{ padding: "10px 14px", borderRadius: 8, background: "var(--red-bg)", border: "1px solid var(--red)", color: "var(--red)", fontSize: 12.5 }}>
+            {error}
+          </div>
+        )}
+
+        {/* STAGE 1: TRANSPARENT CONFIGURATION REVIEW */}
+        {stage === "config" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* Recommended Settings Card */}
+            <div style={{
+              padding: "16px 18px", borderRadius: 12, background: "var(--bg-card2)",
+              border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 10,
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".06em", display: "flex", alignItems: "center", gap: 6 }}>
+                <I.Zap /> Recommended Configuration (AWS Free Tier Eligible)
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, fontSize: 12.5 }}>
+                <div><span style={{ color: "var(--text-3)" }}>Region: </span><strong>{region} (N. Virginia)</strong></div>
+                <div><span style={{ color: "var(--text-3)" }}>Instance Type: </span><strong style={{ color: "var(--green)" }}>{instanceType} (2 vCPU, 1 GB RAM)</strong></div>
+                <div><span style={{ color: "var(--text-3)" }}>OS Image: </span><strong>Amazon Linux 2023</strong></div>
+                <div><span style={{ color: "var(--text-3)" }}>Open Ports: </span><strong>22 (SSH) + {appPort} (App Traffic)</strong></div>
+                <div><span style={{ color: "var(--text-3)" }}>Firewall: </span><strong>proveit-sandbox-sg</strong></div>
+                <div><span style={{ color: "var(--text-3)" }}>Bootstrap: </span><strong>Docker v26.1 + Compose v2.27</strong></div>
+              </div>
+
+              <div style={{ fontSize: 11.5, color: "var(--text-3)", borderTop: "1px solid var(--border-soft)", paddingTop: 8 }}>
+                🔑 <strong>Zero-Setup Deploy Key:</strong> ProveIt injects a self-contained in-memory SSH deploy key via cloud-init. No pre-existing AWS key pairs required.
+              </div>
+            </div>
+
+            {/* Customization Accordion */}
+            <div>
+              <button
+                onClick={() => setCustomizing(!customizing)}
+                style={{
+                  background: "transparent", border: "none", color: "var(--text-2)", fontSize: 12,
+                  fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, padding: 0,
+                }}
+              >
+                <span>{customizing ? "▼ Hide Custom Settings" : "▶ Customize Settings (Optional)"}</span>
+              </button>
+
+              {customizing && (
+                <div style={{
+                  marginTop: 10, padding: 14, borderRadius: 10, background: "var(--bg-input)",
+                  border: "1px solid var(--border)", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12,
+                }}>
+                  <div style={{ gridColumn: "span 2" }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", display: "block", marginBottom: 4 }}>Instance Name</label>
+                    <input
+                      value={instanceName} onChange={e => setInstanceName(e.target.value)}
+                      style={{ width: "100%", padding: "7px 10px", borderRadius: 6, background: "var(--bg-card)", color: "var(--text-1)", border: "1px solid var(--border)", fontSize: 12.5 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", display: "block", marginBottom: 4 }}>AWS Region</label>
+                    <select
+                      value={region} onChange={e => setRegion(e.target.value)}
+                      style={{ width: "100%", padding: "7px 10px", borderRadius: 6, background: "var(--bg-card)", color: "var(--text-1)", border: "1px solid var(--border)", fontSize: 12.5 }}
+                    >
+                      <option value="us-east-1">us-east-1 (N. Virginia)</option>
+                      <option value="us-west-2">us-west-2 (Oregon)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", display: "block", marginBottom: 4 }}>Instance Sizing (Locked to Free Tier)</label>
+                    <select
+                      value={instanceType} onChange={e => setInstanceType(e.target.value)}
+                      style={{ width: "100%", padding: "7px 10px", borderRadius: 6, background: "var(--bg-card)", color: "var(--text-1)", border: "1px solid var(--border)", fontSize: 12.5 }}
+                    >
+                      <option value="t3.micro">t3.micro (Free Tier · 2 vCPU, 1GB RAM)</option>
+                      <option value="t2.micro">t2.micro (Free Tier · 1 vCPU, 1GB RAM)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", display: "block", marginBottom: 4 }}>Application Port</label>
+                    <input
+                      type="number" value={appPort} onChange={e => setAppPort(Number(e.target.value))}
+                      style={{ width: "100%", padding: "7px 10px", borderRadius: 6, background: "var(--bg-card)", color: "var(--text-1)", border: "1px solid var(--border)", fontSize: 12.5 }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
+              <button onClick={onClose} style={{
+                padding: "10px 18px", borderRadius: 8, border: "1px solid var(--border)",
+                background: "transparent", color: "var(--text-2)", fontSize: 13, fontWeight: 600, cursor: "pointer",
+              }}>
+                Cancel
+              </button>
+              <button onClick={handleStartProvision} style={{
+                padding: "10px 24px", borderRadius: 8, border: "none",
+                background: "var(--orange)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 7,
+              }}>
+                <I.Zap /> Continue with Recommended Settings
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STAGE 2: LIVE AUDIT TRAIL STREAM */}
+        {(stage === "streaming" || stage === "done") && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* Step Checkpoints */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, padding: "10px 0" }}>
+              {STAGES.map(s => {
+                const isPassed = currentStage > s.num || stage === "done";
+                const isCurrent = currentStage === s.num && stage === "streaming";
+                return (
+                  <div key={s.num} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, textAlign: "center" }}>
+                    <div style={{
+                      width: 22, height: 22, borderRadius: "50%",
+                      background: isPassed ? "var(--green-bg)" : isCurrent ? "var(--orange-bg)" : "var(--badge-bg)",
+                      color: isPassed ? "var(--green)" : isCurrent ? "var(--orange)" : "var(--text-3)",
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700,
+                      border: `1px solid ${isPassed ? "var(--green)" : isCurrent ? "var(--orange)" : "var(--border)"}`,
+                    }}>
+                      {isPassed ? <I.Check /> : isCurrent ? <I.Loader /> : s.num}
+                    </div>
+                    <span style={{ fontSize: 9.5, fontWeight: isCurrent ? 700 : 500, color: isPassed ? "var(--text-1)" : "var(--text-3)", lineHeight: 1.2 }}>
+                      {s.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Real-time Streaming Logs Terminal */}
+            <div style={{
+              borderRadius: 10, background: "var(--bg-app)", border: "1px solid var(--border)",
+              padding: "14px 16px", fontFamily: "JetBrains Mono, monospace", fontSize: 11.5,
+              display: "flex", flexDirection: "column", gap: 8, minHeight: 160, maxHeight: 220, overflowY: "auto",
+            }}>
+              {streamLogs.map((l, idx) => (
+                <div key={idx} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                  <span style={{ color: "var(--text-3)", flexShrink: 0 }}>[{l.ts || "LIVE"}]</span>
+                  <span style={{ color: l.status === "COMPLETED" ? "var(--green)" : "var(--orange)", fontWeight: 700, flexShrink: 0 }}>
+                    {l.status === "COMPLETED" ? "[DONE]" : "[AUDIT]"}
+                  </span>
+                  <span style={{ color: "var(--text-1)" }}>{l.log}</span>
+                </div>
+              ))}
+              {stage === "streaming" && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--orange)", fontStyle: "italic", marginTop: 4 }}>
+                  <I.Loader /> Streaming live AWS execution telemetry…
+                </div>
+              )}
+            </div>
+
+            {/* Completion View */}
+            {stage === "done" && provisionedInst && (
+              <div style={{
+                padding: "14px 18px", borderRadius: 10, background: "var(--green-bg)",
+                border: "1px solid rgba(22, 163, 74, 0.3)", display: "flex", justifyContent: "space-between", alignItems: "center",
+              }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--green)" }}>
+                    ✅ EC2 Instance Successfully Launched & Online!
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "var(--text-2)", marginTop: 2, fontFamily: "JetBrains Mono, monospace" }}>
+                    ID: {provisionedInst.instance_id} · Public IP: <strong>{provisionedInst.public_ip}</strong>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={onClose} style={{
+                    padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border)",
+                    background: "var(--bg-card)", color: "var(--text-1)", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  }}>
+                    View in Fleet
+                  </button>
+                  {context?.target_repo && onDeployNow && (
+                    <button
+                      onClick={() => {
+                        onClose();
+                        onDeployNow(context.target_repo!, provisionedInst.instance_id);
+                      }}
+                      style={{
+                        padding: "8px 18px", borderRadius: 8, border: "none",
+                        background: "var(--orange)", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                      }}
+                    >
+                      🚀 Deploy {context.target_repo.split("/").pop()} Now ➔
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 /* ─────────── 1. REPOSITORIES PANEL ─────────── */
 const ReposPanel = ({
   repos,
@@ -1296,27 +1642,61 @@ const EC2FleetPanel = ({
   instances,
   onDeployToInstance,
   onRefresh,
+  onOpenProvision,
 }: {
   instances: EC2InstanceItem[];
   onDeployToInstance: (inst: EC2InstanceItem) => void;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<void>;
+  onOpenProvision?: () => void;
 }) => {
   const [testingId, setTestingId] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<Record<string, string>>({});
+  const [testResult, setTestResult] = useState<Record<string, { status: string; message: string }>>({});
   const [showAdd, setShowAdd] = useState(false);
   const [newInstanceName, setNewInstanceName] = useState("");
   const [newIp, setNewIp] = useState("");
   const [newSshUser, setNewSshUser] = useState("ubuntu");
   const [adding, setAdding] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [powerActionId, setPowerActionId] = useState<string | null>(null);
+
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setTimeout(() => setRefreshing(false), 400);
+    }
+  };
+
+  const handlePowerAction = async (instId: string, action: "start" | "stop") => {
+    setPowerActionId(instId);
+    try {
+      await fetch(`${API_BASE}/api/agent/ec2/instances/${instId}/${action}`, { method: "POST" });
+      await onRefresh();
+    } catch {}
+    setPowerActionId(null);
+  };
 
   const testInstance = async (inst: EC2InstanceItem) => {
     setTestingId(inst.instance_id);
     try {
       const res = await fetch(`${API_BASE}/api/agent/ec2/instances/${inst.instance_id}/test`, { method: "POST" });
       const data = await res.json();
-      setTestResult(p => ({ ...p, [inst.instance_id]: `${data.latency_ms}ms · ${data.message}` }));
+      setTestResult(p => ({
+        ...p,
+        [inst.instance_id]: {
+          status: data.status || "HEALTHY",
+          message: data.message || `${data.latency_ms}ms · SSH Port 22 OK`,
+        }
+      }));
     } catch {
-      setTestResult(p => ({ ...p, [inst.instance_id]: "Connected via SSH port 22. Docker OK." }));
+      setTestResult(p => ({
+        ...p,
+        [inst.instance_id]: {
+          status: "UNREACHABLE",
+          message: "Failed to connect to EC2 port 22.",
+        }
+      }));
     }
     setTestingId(null);
   };
@@ -1352,18 +1732,27 @@ const EC2FleetPanel = ({
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-1)" }}>Active AWS EC2 Fleet</div>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
-            Connected compute targets for autonomous container deployment & .env injection
+            Connected compute targets for autonomous container deployment & .env injection. Simulated nodes allow offline testing without AWS cost; use "Connect EC2 Instance" to attach a real AWS host.
           </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={onRefresh} style={{
-            display: "flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 8,
+          <button onClick={handleManualRefresh} disabled={refreshing} style={{
+            display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8,
             border: "1px solid var(--border)", background: "var(--bg-card2)", color: "var(--text-1)",
-            fontSize: 12, fontWeight: 600, cursor: "pointer",
+            fontSize: 12, fontWeight: 600, cursor: refreshing ? "not-allowed" : "pointer",
           }}>
-            <I.Refresh /> Refresh Fleet
+            {refreshing ? <><I.Loader /> Syncing AWS…</> : <><I.Refresh /> Refresh Fleet</>}
           </button>
+          {onOpenProvision && (
+            <button onClick={onOpenProvision} style={{
+              display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8,
+              border: "1px solid rgba(22, 163, 74, 0.4)", background: "rgba(22, 163, 74, 0.1)", color: "#16a34a",
+              fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+            }}>
+              <I.Zap /> 1-Click Provision EC2
+            </button>
+          )}
           <button onClick={() => setShowAdd(!showAdd)} style={{
             display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8,
             border: "none", background: "var(--orange)", color: "#fff",
@@ -1406,55 +1795,94 @@ const EC2FleetPanel = ({
 
       {/* Grid of EC2 Instances */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16 }}>
-        {instances.map(inst => (
-          <div key={inst.instance_id} style={{
-            borderRadius: 12, background: "var(--bg-card)", border: "1px solid var(--border)",
-            padding: 20, display: "flex", flexDirection: "column", gap: 14,
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-1)" }}>{inst.name}</div>
-                <div style={{ fontSize: 11.5, color: "var(--text-3)", fontFamily: "JetBrains Mono, monospace", marginTop: 2 }}>
-                  {inst.instance_id} · {inst.region}
+        {instances.map(inst => {
+          const isMock = inst.instance_id.startsWith("i-0a8f") || inst.instance_id.startsWith("i-0b7e");
+          const isRunning = inst.state.toLowerCase() === "running";
+          const isStopped = inst.state.toLowerCase() === "stopped";
+          const isPending = inst.state.toLowerCase() === "pending" || inst.state.toLowerCase() === "stopping";
+          const pingInfo = testResult[inst.instance_id];
+
+          return (
+            <div key={inst.instance_id} style={{
+              borderRadius: 12, background: "var(--bg-card)", border: "1px solid var(--border)",
+              padding: 20, display: "flex", flexDirection: "column", gap: 14,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text-1)" }}>{inst.name}</span>
+                    {isMock ? (
+                      <span style={{ fontSize: 9.5, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(234, 179, 8, 0.15)", color: "#d97706", border: "1px solid rgba(234, 179, 8, 0.3)" }}>
+                        SIMULATED NODE
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 9.5, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(22, 163, 74, 0.15)", color: "#16a34a", border: "1px solid rgba(22, 163, 74, 0.3)" }}>
+                        LIVE AWS NODE
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "var(--text-3)", fontFamily: "JetBrains Mono, monospace", marginTop: 2 }}>
+                    {inst.instance_id} · {inst.region}
+                  </div>
                 </div>
+                <span style={{
+                  fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 4,
+                  background: isRunning ? "#16a34a" : isStopped ? "rgba(220, 38, 38, 0.15)" : "rgba(234, 179, 8, 0.15)",
+                  color: isRunning ? "#ffffff" : isStopped ? "#dc2626" : "#d97706",
+                  border: isRunning ? "none" : `1px solid ${isStopped ? "rgba(220,38,38,0.3)" : "rgba(234,179,8,0.3)"}`,
+                }}>
+                  {inst.state.toUpperCase()}
+                </span>
               </div>
-              <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: "#16a34a", color: "#ffffff" }}>
-                {inst.state.toUpperCase()}
-              </span>
-            </div>
 
-            <div style={{ padding: "10px 12px", borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-soft)", fontSize: 12, fontFamily: "JetBrains Mono, monospace", display: "flex", flexDirection: "column", gap: 4 }}>
-              <div><span style={{ color: "var(--text-3)" }}>Public IP: </span><strong style={{ color: "var(--orange)" }}>{inst.public_ip}</strong></div>
-              <div><span style={{ color: "var(--text-3)" }}>Type: </span>{inst.instance_type}</div>
-              <div><span style={{ color: "var(--text-3)" }}>SSH Target: </span>{inst.ssh_user}@{inst.public_ip}:22</div>
-              <div><span style={{ color: "var(--text-3)" }}>Docker Engine: </span>{inst.docker_installed ? "Installed & Healthy" : "Missing"}</div>
-            </div>
-
-            {testResult[inst.instance_id] && (
-              <div style={{ fontSize: 11.5, color: "#ffffff", fontFamily: "JetBrains Mono, monospace", padding: "6px 10px", borderRadius: 6, background: "#16a34a" }}>
-                {testResult[inst.instance_id]}
+              <div style={{ padding: "10px 12px", borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-soft)", fontSize: 12, fontFamily: "JetBrains Mono, monospace", display: "flex", flexDirection: "column", gap: 4 }}>
+                <div><span style={{ color: "var(--text-3)" }}>Public IP: </span><strong style={{ color: "var(--orange)" }}>{inst.public_ip}</strong></div>
+                <div><span style={{ color: "var(--text-3)" }}>Type: </span>{inst.instance_type}</div>
+                <div><span style={{ color: "var(--text-3)" }}>SSH Target: </span>{inst.ssh_user}@{inst.public_ip}:22</div>
+                <div><span style={{ color: "var(--text-3)" }}>Docker Engine: </span>{inst.docker_installed ? "Installed & Enabled" : "Missing"}</div>
               </div>
-            )}
 
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: "auto" }}>
-              <button onClick={() => testInstance(inst)} style={{
-                flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)",
-                background: "var(--bg-card2)", color: "var(--text-1)", fontSize: 12, fontWeight: 600, cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-              }}>
-                {testingId === inst.instance_id ? <><I.Loader /> Ping…</> : <><I.Terminal /> Ping EC2</>}
-              </button>
+              {pingInfo && (
+                <div style={{
+                  fontSize: 11.5, fontFamily: "JetBrains Mono, monospace", padding: "7px 10px", borderRadius: 6,
+                  background: pingInfo.status === "HEALTHY" ? "var(--green-bg)" : "var(--red-bg)",
+                  color: pingInfo.status === "HEALTHY" ? "var(--green)" : "var(--red)",
+                  border: `1px solid ${pingInfo.status === "HEALTHY" ? "rgba(22,163,74,0.3)" : "rgba(220,38,38,0.3)"}`,
+                }}>
+                  {pingInfo.message}
+                </div>
+              )}
 
-              <button onClick={() => onDeployToInstance(inst)} style={{
-                flex: 1, padding: "8px 14px", borderRadius: 8, border: "none",
-                background: "var(--orange)", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-              }}>
-                <I.Play /> Deploy Here
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: "auto" }}>
+                <button onClick={() => testInstance(inst)} disabled={testingId === inst.instance_id} style={{
+                  flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)",
+                  background: "var(--bg-card2)", color: "var(--text-1)", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                }}>
+                  {testingId === inst.instance_id ? <><I.Loader /> Ping…</> : <><I.Terminal /> Ping EC2</>}
+                </button>
+
+                {isStopped ? (
+                  <button onClick={() => handlePowerAction(inst.instance_id, "start")} disabled={powerActionId === inst.instance_id} style={{
+                    flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--green)",
+                    background: "var(--green-bg)", color: "var(--green)", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  }}>
+                    {powerActionId === inst.instance_id ? <><I.Loader /> Starting…</> : <><I.Play /> Start Node</>}
+                  </button>
+                ) : (
+                  <button onClick={() => onDeployToInstance(inst)} style={{
+                    flex: 1, padding: "8px 14px", borderRadius: 8, border: "none",
+                    background: "var(--orange)", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  }}>
+                    <I.Play /> Deploy Here
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -1578,6 +2006,14 @@ const DeploymentWizardModal = ({
 const SecretsPanel = ({ profile, onOpenConnect }: { profile?: any; onOpenConnect?: () => void }) => {
   const [testing, setTesting] = useState<Record<string, "idle" | "testing" | "ok" | "fail">>({});
   const [testResult, setTestResult] = useState<Record<string, string>>({});
+  const [vault, setVault] = useState<any>(null);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/agent/vault`)
+      .then(r => r.json())
+      .then(setVault)
+      .catch(() => {});
+  }, []);
 
   const testConnection = async (target: string) => {
     setTesting(p => ({ ...p, [target]: "testing" }));
@@ -1648,13 +2084,68 @@ const SecretsPanel = ({ profile, onOpenConnect }: { profile?: any; onOpenConnect
           </button>
         </div>
         <div style={{ padding: 20 }}>
-          <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 4 }}>AWS Access Key ID</div>
-          <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "var(--text-1)", marginBottom: 14 }}>AKIAIOSFODNN7EXAMPLE</div>
-          <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 4 }}>AWS Region</div>
-          <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "var(--text-1)", marginBottom: testResult["aws"] ? 14 : 0 }}>us-east-1</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 14 }}>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 4 }}>AWS Access Key ID</div>
+              <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "var(--text-1)" }}>
+                {vault?.aws?.access_key_masked || "AKIA••••••••IBPA"}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 4 }}>AWS Region</div>
+              <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "var(--text-1)" }}>
+                {vault?.aws?.region || "us-east-1"}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 4 }}>Cloud Execution Mode</div>
+              <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: vault?.aws?.cloud_mode === "aws" ? "var(--green)" : "var(--yellow)", fontWeight: 700 }}>
+                {(vault?.aws?.cloud_mode || "mock").toUpperCase()}
+              </div>
+            </div>
+          </div>
           {testResult["aws"] && (
-            <div style={{ padding: "8px 12px", borderRadius: 6, background: "#16a34a", color: "#ffffff", fontSize: 12, fontFamily: "JetBrains Mono, monospace" }}>
+            <div style={{ padding: "8px 12px", borderRadius: 6, background: testing["aws"] === "ok" ? "var(--green-bg)" : "var(--red-bg)", color: testing["aws"] === "ok" ? "var(--green)" : "var(--red)", fontSize: 12, fontFamily: "JetBrains Mono, monospace" }}>
               {testResult["aws"]}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* AI LLM Provider Card */}
+      <div style={{ borderRadius: 12, background: "var(--bg-card)", border: "1px solid var(--border)", overflow: "hidden", marginBottom: 20 }}>
+        <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, background: "var(--badge-bg)" }}>
+          <span style={{ color: "var(--orange)" }}><I.Bot /></span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-1)" }}>Autonomous AI Engine & LLM Provider</span>
+          <div style={{ flex: 1 }} />
+          <button onClick={() => testConnection("ai")} style={{ padding: "6px 14px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text-1)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            {testing["ai"] === "testing" ? "Testing…" : testing["ai"] === "ok" ? "Connected" : "Test AI Model"}
+          </button>
+        </div>
+        <div style={{ padding: 20 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 14 }}>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 4 }}>Active Provider</div>
+              <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "var(--text-1)", textTransform: "uppercase" }}>
+                {vault?.llm?.provider || "gemini"}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 4 }}>Configured Model</div>
+              <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "var(--text-1)" }}>
+                {vault?.llm?.model || "gemini-2.5-flash"}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 4 }}>Key Status</div>
+              <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: vault?.llm?.configured ? "var(--green)" : "var(--yellow)", fontWeight: 700 }}>
+                {vault?.llm?.configured ? "CONFIGURED" : "PENDING (Set in .env)"}
+              </div>
+            </div>
+          </div>
+          {testResult["ai"] && (
+            <div style={{ padding: "8px 12px", borderRadius: 6, background: testing["ai"] === "ok" ? "var(--green-bg)" : "var(--red-bg)", color: testing["ai"] === "ok" ? "var(--green)" : "var(--red)", fontSize: 12, fontFamily: "JetBrains Mono, monospace" }}>
+              {testResult["ai"]}
             </div>
           )}
         </div>
@@ -1694,10 +2185,12 @@ const RepoAnalyzerPanel = ({
   repos,
   onDeploy,
   onInjectEnv,
+  onProvisionRecommendedEC2,
 }: {
   repos: RepoItem[];
   onDeploy: (repo: string) => void;
   onInjectEnv: (repo: string) => void;
+  onProvisionRecommendedEC2?: (ctx: any) => void;
 }) => {
   const [repoInput, setRepoInput] = useState(repos[0]?.name || "https://github.com/fastapi/fastapi");
   const [analyzing, setAnalyzing] = useState(false);
@@ -1851,6 +2344,22 @@ const RepoAnalyzerPanel = ({
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {onProvisionRecommendedEC2 && (
+                <button onClick={() => onProvisionRecommendedEC2({
+                  name: `Host-${result.repository.split("/").pop()}`,
+                  target_repo: result.repository,
+                  app_port: result.exposed_port || 5000,
+                  framework: result.framework || "Web Framework",
+                  instance_type: "t3.micro",
+                  region: "us-east-1",
+                })} style={{
+                  display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8,
+                  border: "1px solid rgba(22, 163, 74, 0.4)", background: "rgba(22, 163, 74, 0.1)", color: "#16a34a",
+                  fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+                }}>
+                  <I.Zap /> 1-Click AWS EC2 (Free Tier)
+                </button>
+              )}
               <button onClick={() => onInjectEnv(result.repository)} style={{
                 display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8,
                 border: "1px solid var(--border)", background: "var(--bg-card2)", color: "var(--text-1)",
@@ -2817,6 +3326,8 @@ function MainApp() {
   const [deployModalOpen, setDeployModalOpen] = useState(false);
   const [connectModalOpen, setConnectModalOpen] = useState(false);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [provisionModalOpen, setProvisionModalOpen] = useState(false);
+  const [provisionContext, setProvisionContext] = useState<any>(null);
   const currentUser = user?.username || "admin";
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -3061,6 +3572,24 @@ function MainApp() {
     setTimeout(() => {
       send(`Deploy ${repoName} to EC2 ${instanceId}`, repoName, instanceId, envVal);
     }, 150);
+  };
+
+  const handleOpenProvisionForRepo = (ctx: any) => {
+    setProvisionContext(ctx);
+    setProvisionModalOpen(true);
+  };
+
+  const handleOpenProvisionGeneral = () => {
+    const chosen = selectedRepo || (repos[0]?.name ?? "web-app");
+    setProvisionContext({
+      name: `Host-${chosen.split("/").pop()}`,
+      target_repo: chosen,
+      app_port: 5000,
+      framework: "Dockerized App",
+      instance_type: "t3.micro",
+      region: "us-east-1",
+    });
+    setProvisionModalOpen(true);
   };
 
   if (loading) {
@@ -3463,6 +3992,7 @@ function MainApp() {
                   instances={instances}
                   onDeployToInstance={openDeployForInstance}
                   onRefresh={loadData}
+                  onOpenProvision={handleOpenProvisionGeneral}
                 />
               )}
 
@@ -3478,6 +4008,7 @@ function MainApp() {
                   repos={repos}
                   onDeploy={openDeployForRepo}
                   onInjectEnv={openInjectForRepo}
+                  onProvisionRecommendedEC2={handleOpenProvisionForRepo}
                 />
               )}
 
@@ -3508,6 +4039,20 @@ function MainApp() {
         selectedRepo={selectedRepo || (repos[0]?.name ?? "")}
         selectedInstance={selectedInstance || (instances[0]?.instance_id ?? "")}
         onLaunch={handleLaunchFromModal}
+      />
+
+      {/* EC2 Provisioning Wizard Modal with Real-time Boot Audit Trail */}
+      <EC2ProvisionWizardModal
+        open={provisionModalOpen}
+        onClose={() => setProvisionModalOpen(false)}
+        context={provisionContext}
+        onProvisionSuccess={(newInst) => {
+          loadData();
+          if (newInst?.instance_id) setSelectedInstance(newInst.instance_id);
+        }}
+        onDeployNow={(repo, instId) => {
+          handleLaunchFromModal(repo, instId, target);
+        }}
       />
 
       {/* GitHub Connect Modal */}

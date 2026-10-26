@@ -51,6 +51,18 @@ def init_db() -> None:
                 for col_name, col_def in cols_to_add:
                     if col_name not in existing_cols:
                         conn.execute(text(f'ALTER TABLE "user" ADD COLUMN {col_name} {col_def};'))
+                # Auto-migrate run table columns
+                res_run = conn.execute(text("PRAGMA table_info('run');"))
+                existing_run_cols = {row[1] for row in res_run.fetchall()}
+                run_cols_to_add = [
+                    ("target_ec2", "VARCHAR"),
+                    ("environment", "VARCHAR DEFAULT 'production'"),
+                    ("injected_env_json", "VARCHAR DEFAULT '{}'"),
+                ]
+                for col_name, col_def in run_cols_to_add:
+                    if col_name not in existing_run_cols:
+                        conn.execute(text(f'ALTER TABLE "run" ADD COLUMN {col_name} {col_def};'))
+
                 conn.commit()
             except Exception:
                 pass
@@ -60,6 +72,9 @@ def init_db() -> None:
                 conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN DEFAULT FALSE;'))
                 conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS voice_pin VARCHAR DEFAULT \'1234\';'))
                 conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS voice_enabled BOOLEAN DEFAULT TRUE;'))
+                conn.execute(text('ALTER TABLE "run" ADD COLUMN IF NOT EXISTS target_ec2 VARCHAR;'))
+                conn.execute(text('ALTER TABLE "run" ADD COLUMN IF NOT EXISTS environment VARCHAR DEFAULT \'production\';'))
+                conn.execute(text('ALTER TABLE "run" ADD COLUMN IF NOT EXISTS injected_env_json VARCHAR DEFAULT \'{}\';'))
                 conn.commit()
             except Exception:
                 pass

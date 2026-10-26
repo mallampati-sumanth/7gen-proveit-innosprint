@@ -12,7 +12,7 @@ def test_health():
     data = response.json()
     assert data["status"] == "healthy"
     assert data["service"] == "proveit-backend"
-    assert data["cloud_mode"] == "mock"
+    assert data["cloud_mode"] == settings.CLOUD_MODE
 
 
 def test_login_demo():

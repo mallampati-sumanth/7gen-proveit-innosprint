@@ -1,7 +1,11 @@
+import os
 import json
 from typing import List, Optional
+from dotenv import load_dotenv
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+load_dotenv()
 
 
 class Settings(BaseSettings):
@@ -96,3 +100,17 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Synchronize critical secrets to os.environ so boto3 and other sub-libraries discover them reliably
+if settings.AWS_ACCESS_KEY_ID:
+    os.environ["AWS_ACCESS_KEY_ID"] = settings.AWS_ACCESS_KEY_ID
+if settings.AWS_SECRET_ACCESS_KEY:
+    os.environ["AWS_SECRET_ACCESS_KEY"] = settings.AWS_SECRET_ACCESS_KEY
+if settings.AWS_SESSION_TOKEN and not settings.AWS_SESSION_TOKEN.startswith("optional_"):
+    os.environ["AWS_SESSION_TOKEN"] = settings.AWS_SESSION_TOKEN
+elif "AWS_SESSION_TOKEN" in os.environ:
+    del os.environ["AWS_SESSION_TOKEN"]
+if settings.AWS_REGION:
+    os.environ["AWS_DEFAULT_REGION"] = settings.AWS_REGION
+    os.environ["AWS_REGION"] = settings.AWS_REGION
+

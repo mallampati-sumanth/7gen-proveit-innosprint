@@ -1,0 +1,24 @@
+{
+  "name": "7gen-proveit-innosprint",
+  "version": "1.0.0",
+  "description": "> *\"Do not just suggest the fix. Prove it.\"*",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://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@github.com/mallampati-sumanth/7gen-proveit-innosprint.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/mallampati-sumanth/7gen-proveit-innosprint/issues"
+  },
+  "homepage": "https://github.com/mallampati-sumanth/7gen-proveit-innosprint#readme"
+}
