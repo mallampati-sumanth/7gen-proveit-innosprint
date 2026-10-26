@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - CLOUD_MODE=mock
+      - LLM_PROVIDER=gemini
+      - ENVIRONMENT=development
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./backend:/app/backend
+      - ./model:/app/model
+
+  sample-target:
+    build:
+      context: ./sample_app
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"

@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "proveit-model"
+version = "0.1.0"
+description = "ProveIt Autonomous Agent LLM & Reasoning Module"
+readme = "README.md"
+authors = [{ name = "Team 7TH GEN, KL University" }]
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.6.0",
+    "google-genai>=0.1.1",
+    "groq>=0.4.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]

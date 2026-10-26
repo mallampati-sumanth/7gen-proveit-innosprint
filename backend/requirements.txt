@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+pydantic>=2.6.0
+pydantic-settings
+sqlmodel
+httpx
+sse-starlette
+python-jose[cryptography]
+passlib[bcrypt]
+boto3
+docker
+PyGithub
+pytest
+pytest-asyncio

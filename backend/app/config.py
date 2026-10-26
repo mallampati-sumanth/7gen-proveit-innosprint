@@ -1,0 +1,82 @@
+import json
+from typing import List, Optional
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
+
+    # General
+    ENVIRONMENT: str = "development"
+    LOG_LEVEL: str = "INFO"
+    PORT: int = 8000
+    HOST: str = "0.0.0.0"
+    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+
+    # Supabase / Database
+    # Supports postgresql:// or sqlite:///
+    DATABASE_URL: str = "sqlite:///./proveit.db"
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_ANON_KEY: Optional[str] = None
+
+    # Hackathon Demo Auth
+    DEMO_USERNAME: str = "admin"
+    DEMO_PASSWORD: str = "proveit_demo_secret_2026"
+    JWT_SECRET: str = "super_secret_jwt_key_proveit_hackathon_change_in_prod"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRATION_MINUTES: int = 120
+
+    # Cloud Mode: mock | aws
+    CLOUD_MODE: str = "mock"
+    AWS_REGION: str = "us-east-1"
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_SESSION_TOKEN: Optional[str] = None
+    AWS_ACCOUNT_ID: Optional[str] = None
+    AWS_ECR_REGISTRY: Optional[str] = None
+    AWS_ECS_CLUSTER: str = "proveit-cluster"
+    AWS_S3_BUCKET: Optional[str] = None
+    ALLOWED_REGIONS: List[str] = ["us-east-1", "us-west-2"]
+    ALLOWED_INSTANCE_TYPES: List[str] = ["t3.micro", "t3.small"]
+    MAX_MANAGED_INSTANCES: int = 2
+
+    # LLM Settings
+    LLM_PROVIDER: str = "gemini"
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    MAX_AGENT_STEPS: int = 25
+
+    # Chaos & GitHub Integration
+    CHAOS_ENABLED: bool = True
+    GITHUB_TOKEN: str = ""
+    GITHUB_CLIENT_ID: Optional[str] = None
+    GITHUB_CLIENT_SECRET: Optional[str] = None
+    GITHUB_WEBHOOK_SECRET: Optional[str] = None
+    GITHUB_DEFAULT_ORG: str = "7gen-engineering"
+    PROVEIT_BOT_NAME: str = "proveit-bot"
+
+    # Observability & Log Connection
+    CLOUDWATCH_LOG_GROUP: str = "/aws/proveit/deployments"
+    CLOUDWATCH_STREAM_NAME: str = "agent-stream"
+    SENTRY_DSN: Optional[str] = None
+    DATADOG_API_KEY: Optional[str] = None
+
+    @field_validator("CORS_ORIGINS", "ALLOWED_REGIONS", "ALLOWED_INSTANCE_TYPES", mode="before")
+    @classmethod
+    def parse_json_list(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                return [item.strip() for item in v.split(",") if item.strip()]
+        return v
+
+
+settings = Settings()

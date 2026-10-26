@@ -1,0 +1,23 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'ProveIt - Target EC2 Instance running Docker with SSM and CloudWatch'
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues: [t3.micro, t3.small]
+  ManagedTag:
+    Type: String
+    Default: 'true'
+
+Resources:
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: ami-0c7217cdde317cfec # Example Amazon Linux 2023 in us-east-1
+      Tags:
+        - Key: proveit:managed
+          Value: !Ref ManagedTag
+        - Key: Name
+          Value: ProveIt-App-Host
