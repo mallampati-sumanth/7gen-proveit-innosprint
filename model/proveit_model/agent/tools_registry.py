@@ -1,8 +1,16 @@
+import os
+import sys
 import json
 import time
 import hashlib
 import logging
 from typing import Dict, Any, List, Optional
+
+# Ensure workspace root is in sys.path so 'backend' can be resolved anywhere
+workspace_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
+if workspace_root not in sys.path:
+    sys.path.insert(0, workspace_root)
+
 from proveit_model.providers.base import ToolDefinition
 from proveit_model.tools.aws_tools import AWSTools
 from proveit_model.tools.github_tools import GitHubTools
@@ -452,9 +460,10 @@ class ToolExecutor:
                 port = arguments.get("port") or context.get("port", 3000)
                 verdict = self.guard.evaluate(
                     action=action,
+                    environment=context.get("environment", "production"),
                     parameters={"instance_id": instance_id, "repo": repo, "port": port},
                 )
-                return verdict.model_dump()
+                return verdict.model_dump() if hasattr(verdict, "model_dump") else verdict.dict()
 
             elif tool_name == "deploy_to_ec2_instance":
                 instance_id = arguments.get("instance_id") or context.get("ec2_id", "i-0a8f9c12345678")
@@ -535,9 +544,12 @@ class ToolExecutor:
                 branch = arguments.get("branch", "main")
                 root_dir = arguments.get("root_directory") or context.get("root_directory")
                 env = arguments.get("environment") or context.get("environment", "production")
-                res = await cloud_registry.get_provider("vercel").deploy_repository(repo_url, branch=branch, root_directory=root_dir, environment=env)
+                prov = cloud_registry.get_provider("vercel")
+                if not prov:
+                    return {"status": "ERROR", "error": "Provider 'vercel' not found or unconfigured."}
+                res = await prov.deploy_repository(repo_url, branch=branch, root_directory=root_dir, environment=env)
                 context["app_url"] = res.live_url
-                return res.model_dump()
+                return res.model_dump() if hasattr(res, "model_dump") else (res.__dict__ if hasattr(res, "__dict__") else res)
 
             elif tool_name == "deploy_to_render":
                 from backend.app.providers.registry import cloud_registry
@@ -545,9 +557,12 @@ class ToolExecutor:
                 branch = arguments.get("branch", "main")
                 root_dir = arguments.get("root_directory") or context.get("root_directory")
                 env = arguments.get("environment") or context.get("environment", "production")
-                res = await cloud_registry.get_provider("render").deploy_repository(repo_url, branch=branch, root_directory=root_dir, environment=env)
+                prov = cloud_registry.get_provider("render")
+                if not prov:
+                    return {"status": "ERROR", "error": "Provider 'render' not found or unconfigured."}
+                res = await prov.deploy_repository(repo_url, branch=branch, root_directory=root_dir, environment=env)
                 context["app_url"] = res.live_url
-                return res.model_dump()
+                return res.model_dump() if hasattr(res, "model_dump") else (res.__dict__ if hasattr(res, "__dict__") else res)
 
             elif tool_name == "deploy_to_railway":
                 from backend.app.providers.registry import cloud_registry
@@ -555,9 +570,12 @@ class ToolExecutor:
                 branch = arguments.get("branch", "main")
                 root_dir = arguments.get("root_directory") or context.get("root_directory")
                 env = arguments.get("environment") or context.get("environment", "production")
-                res = await cloud_registry.get_provider("railway").deploy_repository(repo_url, branch=branch, root_directory=root_dir, environment=env)
+                prov = cloud_registry.get_provider("railway")
+                if not prov:
+                    return {"status": "ERROR", "error": "Provider 'railway' not found or unconfigured."}
+                res = await prov.deploy_repository(repo_url, branch=branch, root_directory=root_dir, environment=env)
                 context["app_url"] = res.live_url
-                return res.model_dump()
+                return res.model_dump() if hasattr(res, "model_dump") else (res.__dict__ if hasattr(res, "__dict__") else res)
 
             elif tool_name == "deploy_to_netlify":
                 from backend.app.providers.registry import cloud_registry
@@ -565,22 +583,28 @@ class ToolExecutor:
                 branch = arguments.get("branch", "main")
                 root_dir = arguments.get("root_directory") or context.get("root_directory")
                 env = arguments.get("environment") or context.get("environment", "production")
-                res = await cloud_registry.get_provider("netlify").deploy_repository(repo_url, branch=branch, root_directory=root_dir, environment=env)
+                prov = cloud_registry.get_provider("netlify")
+                if not prov:
+                    return {"status": "ERROR", "error": "Provider 'netlify' not found or unconfigured."}
+                res = await prov.deploy_repository(repo_url, branch=branch, root_directory=root_dir, environment=env)
                 context["app_url"] = res.live_url
-                return res.model_dump()
+                return res.model_dump() if hasattr(res, "model_dump") else (res.__dict__ if hasattr(res, "__dict__") else res)
 
             elif tool_name == "search_user_repositories":
                 from backend.app.services.sarvam_voice import sarvam_voice_service
                 from backend.app.providers.registry import cloud_registry
-                from backend.app.db import engine
-                from backend.app.entities.models import RepoConfig
-                from sqlmodel import Session, select
 
                 query = arguments.get("query") or arguments.get("repo_name", "")
                 user_repos = []
-                with Session(engine) as sess:
-                    configs = sess.exec(select(RepoConfig)).all()
-                    user_repos = [c.repo_id for c in configs]
+                try:
+                    from backend.app.db import engine
+                    from backend.app.entities.models import RepoConfig
+                    from sqlmodel import Session, select
+                    with Session(engine) as sess:
+                        configs = sess.exec(select(RepoConfig)).all()
+                        user_repos = [c.repo_id for c in configs]
+                except Exception as db_err:
+                    logger.warning(f"Could not load repos from DB: {db_err}")
                 if not user_repos:
                     user_repos = ["pallets/flask", "fastapi/fastapi", "vercel/next.js"]
 
@@ -592,22 +616,25 @@ class ToolExecutor:
                 return search_res
 
             elif tool_name == "list_user_repositories":
-                from backend.app.db import engine
-                from backend.app.entities.models import RepoConfig
                 from backend.app.providers.registry import cloud_registry
-                from sqlmodel import Session, select
-
-                with Session(engine) as sess:
-                    configs = sess.exec(select(RepoConfig)).all()
-                    repos_list = [
-                        {
-                            "repo_id": c.repo_id,
-                            "short_name": c.repo_id.split("/")[-1],
-                            "language": c.language,
-                            "recommended_provider": cloud_registry.recommend_provider(c.repo_id, c.language).get("recommended_provider"),
-                        }
-                        for c in configs
-                    ]
+                repos_list = []
+                try:
+                    from backend.app.db import engine
+                    from backend.app.entities.models import RepoConfig
+                    from sqlmodel import Session, select
+                    with Session(engine) as sess:
+                        configs = sess.exec(select(RepoConfig)).all()
+                        repos_list = [
+                            {
+                                "repo_id": c.repo_id,
+                                "short_name": c.repo_id.split("/")[-1],
+                                "language": c.language,
+                                "recommended_provider": cloud_registry.recommend_provider(c.repo_id, c.language).get("recommended_provider"),
+                            }
+                            for c in configs
+                        ]
+                except Exception as db_err:
+                    logger.warning(f"Could not list repos: {db_err}")
                 return {"count": len(repos_list), "repositories": repos_list}
 
             elif tool_name == "deploy_to_cloud":
@@ -617,6 +644,7 @@ class ToolExecutor:
                 branch = arguments.get("branch", "main")
                 root_dir = arguments.get("root_directory") or context.get("root_directory")
                 env = arguments.get("environment") or context.get("environment", "production")
+                gh_token = getattr(self.github, "token", "") or os.getenv("GITHUB_TOKEN", "")
 
                 if provider_name == "aws":
                     inst_id = context.get("ec2_id", "i-0a8f9c12345678")
@@ -629,7 +657,7 @@ class ToolExecutor:
                         env_vars=context.get("injected_env", {}),
                         port=port,
                         branch=branch,
-                        github_token=getattr(self.github, "token", "") or os.getenv("GITHUB_TOKEN", ""),
+                        github_token=gh_token,
                     )
                 else:
                     prov = cloud_registry.get_provider(provider_name)
@@ -640,10 +668,10 @@ class ToolExecutor:
                         branch=branch,
                         root_directory=root_dir,
                         environment=env,
-                        github_token=getattr(self.github, "token", "") or os.getenv("GITHUB_TOKEN", ""),
+                        github_token=gh_token,
                     )
                     context["app_url"] = res.live_url
-                    return res.model_dump()
+                    return res.model_dump() if hasattr(res, "model_dump") else (res.__dict__ if hasattr(res, "__dict__") else res)
 
             elif tool_name == "get_deployment_status":
                 from backend.app.providers.registry import cloud_registry
@@ -655,7 +683,7 @@ class ToolExecutor:
                 if not prov:
                     return {"status": "ERROR", "error": f"Provider '{provider_name}' not found."}
                 res = await prov.get_deployment_status(deployment_id=deployment_id, repo_name=repo_name)
-                return res.model_dump()
+                return res.model_dump() if hasattr(res, "model_dump") else (res.__dict__ if hasattr(res, "__dict__") else res)
 
             elif tool_name == "autonomous_sre_heal":
                 from backend.app.services.self_healing import sre_service
@@ -663,7 +691,7 @@ class ToolExecutor:
                 error_log = arguments.get("error_log", "Error: Process exited with status 1")
                 diagnosis = await sre_service.diagnose_anomaly(target_service=target, error_log=error_log)
                 healed = await sre_service.execute_healing(diagnosis)
-                return healed.model_dump()
+                return healed.model_dump() if hasattr(healed, "model_dump") else (healed.__dict__ if hasattr(healed, "__dict__") else healed)
 
             else:
                 return {"error": f"Unknown tool: '{tool_name}'"}

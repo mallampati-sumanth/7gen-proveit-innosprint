@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -11,7 +11,7 @@ class PolicyVerdict(BaseModel):
 
 class BlastRadiusGuard:
     @staticmethod
-    def evaluate(action: str, environment: str = "production", parameters: Dict[str, Any] = None) -> PolicyVerdict:
+    def evaluate(action: str, environment: str = "production", parameters: Optional[Dict[str, Any]] = None) -> PolicyVerdict:
         params = parameters or {}
         score = 10
         reasons = []
