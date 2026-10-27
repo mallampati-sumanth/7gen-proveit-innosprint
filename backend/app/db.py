@@ -92,21 +92,14 @@ def init_db() -> None:
                 hashed_password=hashed,
                 salt=salt,
                 auth_provider="email",
-                phone_number="+919876543210",
-                phone_verified=True,
+                phone_number=None,
+                phone_verified=False,
                 voice_pin="1234",
                 voice_enabled=True,
                 is_admin=True,
                 is_active=True,
             )
             session.add(admin)
-            session.commit()
-        elif not admin_user.phone_number:
-            admin_user.phone_number = "+919876543210"
-            admin_user.phone_verified = True
-            admin_user.voice_pin = "1234"
-            admin_user.voice_enabled = True
-            session.add(admin_user)
             session.commit()
 
         # Seed EC2 Fleet Instances if empty

@@ -14,7 +14,7 @@ export const VoiceOpsTab = ({
 }) => {
   const { user, updateProfile } = useAuth();
   const [statusData, setStatusData] = useState<any>(null);
-  const [phoneNumber, setPhoneNumber] = useState("+919876543210");
+  const [phoneNumber, setPhoneNumber] = useState(user?.phone_number || "");
   const [voiceEnabled, setVoiceEnabled] = useState<boolean>(true);
   const [savingMobile, setSavingMobile] = useState(false);
   const [mobileMsg, setMobileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -25,22 +25,25 @@ export const VoiceOpsTab = ({
 
   const fetchStatusAndLogs = useCallback(async () => {
     try {
+      const usernameParam = currentUser ? `?username=${encodeURIComponent(currentUser)}` : "";
       const [sRes, lRes] = await Promise.all([
-        fetch(`${API_BASE}/api/voice/status`),
+        fetch(`${API_BASE}/api/voice/status${usernameParam}`),
         fetch(`${API_BASE}/api/voice/logs`),
       ]);
       const sData = await sRes.json();
       const lData = await lRes.json();
       setStatusData(sData);
-      if (sData.demo_user_phone) {
-        setPhoneNumber(sData.demo_user_phone);
+      
+      const resolved = user?.phone_number || sData.user_phone || sData.demo_user_phone || "";
+      if (resolved && resolved !== "+919876543210") {
+        setPhoneNumber(resolved);
       }
       if (typeof sData.voice_enabled === "boolean") {
         setVoiceEnabled(sData.voice_enabled);
       }
       if (Array.isArray(lData)) setLogs(lData);
     } catch { }
-  }, []);
+  }, [currentUser, user?.phone_number]);
 
   useEffect(() => {
     fetchStatusAndLogs();
@@ -241,7 +244,7 @@ export const VoiceOpsTab = ({
               type="tel"
               value={phoneNumber}
               onChange={e => setPhoneNumber(e.target.value)}
-              placeholder="+919876543210"
+              placeholder="Enter mobile number (e.g. +91 77998 26164)"
               style={{
                 flex: 1, padding: "11px 16px", borderRadius: 8,
                 background: "var(--bg-input)", color: "var(--text-1)", border: "1px solid var(--border)",

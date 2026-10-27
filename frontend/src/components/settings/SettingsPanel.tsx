@@ -48,7 +48,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme })
 
   // User Profile & Mobile Number
   const [profileName, setProfileName] = useState(user?.name || "");
-  const [profilePhone, setProfilePhone] = useState(user?.phone_number || "+919876543210");
+  const [profilePhone, setProfilePhone] = useState(user?.phone_number || "");
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -122,7 +122,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme })
   const [telephonyPhone, setTelephonyPhone] = useState("+91 80 4736 1820");
   const [sarvamSpeaker, setSarvamSpeaker] = useState("meera");
   const [sarvamLanguage, setSarvamLanguage] = useState("en-IN");
-  const [userVoicePhone, setUserVoicePhone] = useState("+919876543210");
+  const [userVoicePhone, setUserVoicePhone] = useState(user?.phone_number || "");
   const [voicePin, setVoicePin] = useState("1234");
   const [sarvamConfigured, setSarvamConfigured] = useState(false);
 
@@ -1629,7 +1629,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme })
                     type="text"
                     value={userVoicePhone}
                     onChange={(e) => setUserVoicePhone(e.target.value)}
-                    placeholder="+919876543210"
+                    placeholder="Enter mobile number (e.g. +91 77998 26164)"
                     style={{
                       width: "100%",
                       padding: "9px 12px",

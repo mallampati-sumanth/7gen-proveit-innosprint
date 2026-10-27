@@ -38,11 +38,16 @@ class SimulateCallRequest(BaseModel):
 
 # ─────────── 1. VOICEOPS STATUS & PROFILE ───────────
 @router.get("/status")
-def get_voiceops_status(session: Session = Depends(get_session)):
+def get_voiceops_status(username: Optional[str] = Query(None), session: Session = Depends(get_session)):
     """Returns telephony agent phone number, Sarvam AI config, and webhook URLs."""
-    admin_user = session.exec(select(User).where(User.username == settings.DEMO_USERNAME)).first()
+    user = None
+    if username:
+        user = session.exec(select(User).where(User.username == username.strip())).first()
+    if not user:
+        user = session.exec(select(User).where(User.username == settings.DEMO_USERNAME)).first()
     call_logs_count = len(session.exec(select(VoiceCallLog)).all())
     
+    phone = user.phone_number if (user and user.phone_number) else None
     return {
         "telephony_agent_phone": settings.TELEPHONY_AGENT_PHONE,
         "sarvam_configured": bool(settings.SARVAM_API_KEY and not settings.SARVAM_API_KEY.startswith("your_")),
@@ -51,9 +56,10 @@ def get_voiceops_status(session: Session = Depends(get_session)):
         "sarvam_stt_model": settings.SARVAM_STT_MODEL,
         "sarvam_language": settings.SARVAM_LANGUAGE_CODE,
         "webhook_url": f"{settings.TELEPHONY_WEBHOOK_BASE_URL}/api/voice/webhook/incoming",
-        "demo_user_phone": admin_user.phone_number if admin_user else "+919876543210",
-        "demo_user_pin": admin_user.voice_pin if admin_user else "1234",
-        "voice_enabled": admin_user.voice_enabled if (admin_user and admin_user.voice_enabled is not None) else True,
+        "user_phone": phone,
+        "demo_user_phone": phone,
+        "demo_user_pin": user.voice_pin if user else "1234",
+        "voice_enabled": user.voice_enabled if (user and user.voice_enabled is not None) else True,
         "total_calls_handled": call_logs_count,
     }
 
