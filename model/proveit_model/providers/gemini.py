@@ -30,16 +30,37 @@ class GeminiProvider(BaseLLMProvider):
         # If live client is configured, call Gemini
         if self.client:
             try:
-                # Format messages for Gemini
+                from google.genai import types
                 contents = []
                 for m in messages:
-                    contents.append({"role": "user" if m.role == "user" else "model", "parts": [{"text": m.content}]})
+                    role = "user" if m.role == "user" else "model"
+                    contents.append({"role": role, "parts": [{"text": m.content or ""}]})
 
-                response = self.client.models.generate_content(
-                    model=self.model_name,
-                    contents=contents,
-                )
-                return AgentMessage(role="assistant", content=response.text or "")
+                config = types.GenerateContentConfig(
+                    system_instruction=system_instruction
+                ) if system_instruction else None
+
+                target_model = self.model_name
+                if target_model in ["gemini-2.5-flash", "gemini-2.5"]:
+                    target_model = "gemini-2.0-flash"
+
+                try:
+                    response = self.client.models.generate_content(
+                        model=target_model,
+                        contents=contents,
+                        config=config,
+                    )
+                    if response and response.text:
+                        return AgentMessage(role="assistant", content=response.text)
+                except Exception as inner_e:
+                    logger.warning(f"Primary Gemini model {target_model} failed: {inner_e}. Falling back to gemini-2.0-flash.")
+                    response = self.client.models.generate_content(
+                        model="gemini-2.0-flash",
+                        contents=contents,
+                        config=config,
+                    )
+                    if response and response.text:
+                        return AgentMessage(role="assistant", content=response.text)
             except Exception as e:
                 logger.error(f"Gemini API execution error: {e}, using autonomous reasoning fallback.")
 

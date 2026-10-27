@@ -6,6 +6,7 @@ export const NAV = [
     section: "AGENT DEPLOYMENT",
     items: [
       { id: "chat", icon: <I.Bot />, label: "AI Cloud Architect", badge: "Live SSE" },
+      { id: "pipeline", icon: <I.Activity />, label: "Pipeline Tracker", badge: "Live Flow" },
       { id: "voice", icon: <I.Phone />, label: "VoiceOps Agent", badge: "Voice" },
       { id: "repos", icon: <I.Github />, label: "Code Repositories" },
       { id: "repoenv", icon: <I.Sliders />, label: "Environment Studio", badge: "Per-Repo" },

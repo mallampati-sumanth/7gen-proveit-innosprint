@@ -62,7 +62,6 @@ def init_db() -> None:
                 for col_name, col_def in run_cols_to_add:
                     if col_name not in existing_run_cols:
                         conn.execute(text(f'ALTER TABLE "run" ADD COLUMN {col_name} {col_def};'))
-
                 conn.commit()
             except Exception:
                 pass

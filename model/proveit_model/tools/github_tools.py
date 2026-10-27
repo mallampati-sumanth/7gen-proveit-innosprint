@@ -44,6 +44,11 @@ class GitHubTools:
                         "name": data.get("name") or data.get("login"),
                         "avatar_url": data.get("avatar_url"),
                         "html_url": data.get("html_url"),
+                        "bio": data.get("bio") or "",
+                        "followers": data.get("followers", 0),
+                        "following": data.get("following", 0),
+                        "location": data.get("location") or "",
+                        "company": data.get("company") or "",
                         "public_repos": data.get("public_repos", 0),
                         "total_private_repos": data.get("total_private_repos", 0),
                         "status": "authenticated",
@@ -75,13 +80,16 @@ class GitHubTools:
             return []
 
         try:
-            with httpx.Client(timeout=10.0, verify=False) as client:
+            with httpx.Client(timeout=20.0, verify=False) as client:
                 res = client.get(
-                    f"https://api.github.com/user/repos?sort=updated&per_page={per_page}&page={page}&affiliation=owner,collaborator,organization_member",
+                    f"https://api.github.com/user/repos?sort=updated&per_page={per_page}&page={page}&affiliation=owner,collaborator",
                     headers=headers
                 )
                 if res.status_code == 200:
                     raw_repos = res.json()
+                    profile = self.get_user_profile(token)
+                    my_login = (profile.get("login") or "").lower()
+
                     result = []
                     for r in raw_repos:
                         lang = (r.get("language") or "Other").lower()
@@ -107,13 +115,8 @@ class GitHubTools:
                         })
 
                     # Prioritize repositories owned by the authenticated user
-                    try:
-                        profile = self.get_user_profile(token)
-                        my_login = (profile.get("login") or "").lower()
-                        if my_login:
-                            result.sort(key=lambda item: 0 if item.get("owner", "").lower() == my_login else 1)
-                    except Exception:
-                        pass
+                    if my_login:
+                        result.sort(key=lambda item: (0 if item.get("owner", "").lower() == my_login else 1, item.get("name", "")))
 
                     return result
                 else:

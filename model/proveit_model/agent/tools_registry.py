@@ -374,12 +374,19 @@ class ToolExecutor:
                 repo_name = arguments.get("repo_name") or context.get("target_repo", "")
                 port = int(arguments.get("port") or context.get("port", 3000))
                 injected_env = context.get("injected_env", {})
+                gh_token = (
+                    arguments.get("github_token")
+                    or context.get("github_token")
+                    or getattr(self.github, "token", "")
+                    or os.getenv("GITHUB_TOKEN", "")
+                )
                 res = self.aws.deploy_to_ec2(
                     instance_id=instance_id,
                     public_ip=public_ip,
                     repo_name=repo_name,
                     env_vars=injected_env,
                     port=port,
+                    github_token=gh_token,
                 )
                 context["app_url"] = res.get("app_url")
                 return res

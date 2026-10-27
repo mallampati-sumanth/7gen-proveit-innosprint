@@ -9,8 +9,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlmodel import Session, select
-
+from sqlmodel import Session, select, func, or_
 # Ensure model package is importable
 model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../model"))
 if model_path not in sys.path:
@@ -21,13 +20,15 @@ from backend.app.db import get_session
 from backend.app.entities.models import (
     Run,
     Event,
+    Incident,
     LedgerEntry,
     RepoConfig,
     RepoEnvVar,
     EC2Instance,
     BenchmarkResult,
 )
-from proveit_model import ProveItAgent, GitHubTools, AWSTools, BlastRadiusGuard
+# pyrefly: ignore[missing-import]
+from proveit_model import ProveItAgent, GitHubTools, AWSTools
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
@@ -53,6 +54,9 @@ def get_active_agent_instance() -> ProveItAgent:
         model_name=active_model,
         base_url=settings.OPENAI_BASE_URL if settings.LLM_PROVIDER in ["openai", "ollama"] else None,
     )
+
+if settings.GITHUB_TOKEN:
+    os.environ["GITHUB_TOKEN"] = settings.GITHUB_TOKEN
 
 agent_instance = get_active_agent_instance()
 
@@ -140,7 +144,16 @@ class ChatRequest(BaseModel):
 @router.get("/github/profile")
 def get_github_profile(token: Optional[str] = None):
     """Fetch real GitHub user profile details via GitHub REST API."""
-    use_token = token or settings.GITHUB_TOKEN
+    cleaned_token = (token or "").strip()
+    if cleaned_token and cleaned_token != settings.GITHUB_TOKEN:
+        settings.GITHUB_TOKEN = cleaned_token
+        os.environ["GITHUB_TOKEN"] = cleaned_token
+        github_tools.token = cleaned_token
+        agent_instance.github.token = cleaned_token
+        if hasattr(agent_instance, "executor") and hasattr(agent_instance.executor, "github"):
+            agent_instance.executor.github.token = cleaned_token
+
+    use_token = cleaned_token or settings.GITHUB_TOKEN
     return github_tools.get_user_profile(token=use_token)
 
 
@@ -157,8 +170,32 @@ def connect_github_account(req: GitHubConnectRequest, session: Session = Depends
 
     # Update active token
     settings.GITHUB_TOKEN = tok
+    os.environ["GITHUB_TOKEN"] = tok
     github_tools.token = tok
     agent_instance.github.token = tok
+    if hasattr(agent_instance, "executor") and hasattr(agent_instance.executor, "github"):
+        agent_instance.executor.github.token = tok
+
+    # Persist the user token to .env file so it never reverts on reload
+    try:
+        env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.env"))
+        if os.path.exists(env_path):
+            with open(env_path, "r", encoding="utf-8") as f:
+                env_lines = f.readlines()
+            new_lines = []
+            replaced = False
+            for line in env_lines:
+                if line.startswith("GITHUB_TOKEN="):
+                    new_lines.append(f"GITHUB_TOKEN={tok}\n")
+                    replaced = True
+                else:
+                    new_lines.append(line)
+            if not replaced:
+                new_lines.append(f"\nGITHUB_TOKEN={tok}\n")
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(new_lines)
+    except Exception:
+        pass
 
     # Sync real user repositories into the database
     real_repos = github_tools.list_user_repositories(token=tok, per_page=100)
@@ -178,6 +215,15 @@ def connect_github_account(req: GitHubConnectRequest, session: Session = Depends
             )
             session.add(new_r)
             synced_count += 1
+        else:
+            existing.repo_name = r.get("repo_name", existing.repo_name)
+            existing.owner = r.get("owner", existing.owner)
+            existing.description = r.get("description", existing.description)
+            existing.language = r.get("language", existing.language)
+            existing.default_branch = r.get("default_branch", existing.default_branch)
+            existing.clone_url = r.get("clone_url", existing.clone_url)
+            session.add(existing)
+            synced_count += 1
     session.commit()
 
     return {
@@ -189,12 +235,13 @@ def connect_github_account(req: GitHubConnectRequest, session: Session = Depends
 
 
 @router.post("/github/sync-repos")
-def sync_github_repositories(session: Session = Depends(get_session)):
+def sync_github_repositories(token: Optional[str] = None, session: Session = Depends(get_session)):
     """Sync all real repositories from connected GitHub account into the database."""
-    if not settings.GITHUB_TOKEN or settings.GITHUB_TOKEN.startswith("ghp_demo") or settings.GITHUB_TOKEN.startswith("ghp_your"):
+    tok = (token or "").strip() or settings.GITHUB_TOKEN
+    if not tok or tok.startswith("ghp_demo") or tok.startswith("ghp_your"):
         raise HTTPException(status_code=400, detail="No valid GitHub Personal Access Token configured. Connect your token first.")
 
-    real_repos = github_tools.list_user_repositories(token=settings.GITHUB_TOKEN, per_page=100)
+    real_repos = github_tools.list_user_repositories(token=tok, per_page=100)
     synced = []
     for r in real_repos:
         repo_id = r["name"]
@@ -222,15 +269,61 @@ def sync_github_repositories(session: Session = Depends(get_session)):
 
 
 @router.get("/repos")
-def list_repositories(session: Session = Depends(get_session)):
-    """List all connected GitHub repositories from the database."""
-    db_repos = session.exec(select(RepoConfig).order_by(RepoConfig.id.asc())).all()
-    if not db_repos:
-        # If no repos in DB, attempt live fetch if token is available
-        if settings.GITHUB_TOKEN and not settings.GITHUB_TOKEN.startswith("ghp_demo"):
-            return github_tools.list_user_repositories(token=settings.GITHUB_TOKEN)
-        return []
-    
+def list_repositories(owner: Optional[str] = None, token: Optional[str] = None, session: Session = Depends(get_session)):
+    """List connected GitHub repositories from the database for the active user."""
+    cleaned_token = (token or "").strip()
+    if cleaned_token and cleaned_token != settings.GITHUB_TOKEN:
+        settings.GITHUB_TOKEN = cleaned_token
+        os.environ["GITHUB_TOKEN"] = cleaned_token
+        github_tools.token = cleaned_token
+        agent_instance.github.token = cleaned_token
+        if hasattr(agent_instance, "executor") and hasattr(agent_instance.executor, "github"):
+            agent_instance.executor.github.token = cleaned_token
+
+    active_tok = cleaned_token or settings.GITHUB_TOKEN
+    profile = github_tools.get_user_profile(token=active_tok)
+    connected_login = (profile.get("login") or "").strip().lower()
+    req_owner = owner.strip().lower() if isinstance(owner, str) and owner.strip() else None
+    target_owner = req_owner or connected_login
+
+    query = select(RepoConfig)
+    if target_owner and target_owner != "all":
+        query = query.where(func.lower(RepoConfig.owner) == target_owner)
+
+    db_repos = session.exec(query.order_by(RepoConfig.updated_at.desc(), RepoConfig.id.desc())).all()
+
+    # If database has no repos for this connected user, auto-sync their repos live from GitHub API
+    if not db_repos and active_tok and not active_tok.startswith("ghp_demo"):
+        real_repos = github_tools.list_user_repositories(token=active_tok)
+        for r in real_repos:
+            repo_id = r["name"]
+            existing = session.exec(select(RepoConfig).where(RepoConfig.repo_id == repo_id)).first()
+            if not existing:
+                new_r = RepoConfig(
+                    repo_id=repo_id,
+                    repo_name=r.get("repo_name", repo_id.split("/")[-1]),
+                    owner=r.get("owner", ""),
+                    description=r.get("description", "GitHub repository"),
+                    language=r.get("language", "Other"),
+                    default_branch=r.get("default_branch", "main"),
+                    clone_url=r.get("clone_url"),
+                )
+                session.add(new_r)
+        session.commit()
+        if target_owner and target_owner != "all":
+            db_repos = session.exec(
+                select(RepoConfig)
+                .where(func.lower(RepoConfig.owner) == target_owner)
+                .order_by(RepoConfig.updated_at.desc(), RepoConfig.id.desc())
+            ).all()
+        else:
+            db_repos = session.exec(
+                select(RepoConfig).order_by(RepoConfig.updated_at.desc(), RepoConfig.id.desc())
+            ).all()
+
+    if not db_repos and settings.GITHUB_TOKEN and not settings.GITHUB_TOKEN.startswith("ghp_demo"):
+        return github_tools.list_user_repositories(token=settings.GITHUB_TOKEN)
+
     result = []
     for r in db_repos:
         result.append({
@@ -250,6 +343,11 @@ def list_repositories(session: Session = Depends(get_session)):
             "region": settings.AWS_REGION,
             "ago": "Live",
         })
+
+    # Sort so that repositories owned by the connected user come first
+    if target_owner and target_owner != "all":
+        result.sort(key=lambda item: 0 if item.get("owner", "").lower() == target_owner else 1)
+
     return result
 
 
@@ -950,6 +1048,7 @@ def configure_llm(req: LLMConfigureRequest):
 
 @router.post("/llm/test")
 async def test_llm_endpoint(req: LLMConfigureRequest):
+    # pyrefly: ignore[missing-import]
     from proveit_model.providers import test_llm_connection
     api_k = req.api_key or (
         settings.GEMINI_API_KEY if req.provider == "gemini" else (
@@ -967,8 +1066,63 @@ async def test_llm_endpoint(req: LLMConfigureRequest):
 
 
 @router.post("/chat")
-async def chat_with_agent(req: ChatRequest):
-    reply = await agent_instance.chat(req.message, req.history)
+async def chat_with_agent(req: ChatRequest, session: Session = Depends(get_session)):
+    """Conversational DevOps Diagnostic AI: answers user questions about deployments, pipeline failures, logs, and infrastructure using live DB records."""
+    # Query database for recent deployment telemetry
+    recent_runs = session.exec(select(Run).order_by(Run.id.desc()).limit(10)).all()
+    recent_incidents = session.exec(select(Incident).order_by(Incident.id.desc()).limit(10)).all()
+    recent_events = session.exec(select(Event).order_by(Event.id.desc()).limit(25)).all()
+    instances = session.exec(select(EC2Instance)).all()
+    repos = session.exec(select(RepoConfig)).all()
+    recent_proofs = session.exec(select(LedgerEntry).order_by(LedgerEntry.id.desc()).limit(5)).all()
+
+    db_context_lines = ["=== DATABASE DEPLOYMENT LOGS & TELEMETRY ==="]
+
+    if recent_runs:
+        db_context_lines.append("\n[RECENT DEPLOYMENT RUNS]:")
+        for r in recent_runs:
+            created_str = r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else "N/A"
+            db_context_lines.append(
+                f"- Run ID: {r.run_id} | Status: {r.status} | Repo: {r.target_repo} | Target EC2: {r.target_ec2} | Env: {r.environment} | Time: {created_str} | Prompt: '{r.prompt}'"
+            )
+    else:
+        db_context_lines.append("\n[RECENT DEPLOYMENT RUNS]: No deployments recorded yet.")
+
+    if recent_incidents:
+        db_context_lines.append("\n[DETECTED ANOMALIES & FAILURES]:")
+        for inc in recent_incidents:
+            db_context_lines.append(
+                f"- Incident ID: {inc.incident_id} (Run {inc.run_id}): Scenario: {inc.scenario} | Status: {inc.status} | Attempts: {inc.attempts} | Details: {inc.proof_bundle_json or 'N/A'}"
+            )
+
+    if recent_events:
+        db_context_lines.append("\n[RECENT EXECUTION EVENTS & STEP LOGS]:")
+        for ev in recent_events:
+            ts = ev.created_at.strftime("%H:%M:%S") if ev.created_at else ""
+            db_context_lines.append(f"[{ts}] (Run {ev.run_id}) [{ev.event_type}]: {ev.summary}")
+
+    if instances:
+        db_context_lines.append("\n[AWS EC2 FLEET STATUS]:")
+        for i in instances:
+            db_context_lines.append(
+                f"- Host: {i.name} ({i.instance_id}) | Public IP: {i.public_ip} | State: {i.state} | Docker: {i.docker_installed} | Ping: {i.last_ping_status}"
+            )
+
+    if repos:
+        db_context_lines.append("\n[CONNECTED REPOSITORIES]:")
+        for rp in repos:
+            db_context_lines.append(
+                f"- {rp.repo_id} | Language: {rp.language} | Framework: {rp.framework} | Port: {rp.default_port} | Branch: {rp.default_branch}"
+            )
+
+    if recent_proofs:
+        db_context_lines.append("\n[IMMUTABLE LEDGER PROOFS]:")
+        for pf in recent_proofs:
+            db_context_lines.append(f"- Entry {pf.entry_id} | Action: {pf.action} | Hash: {pf.hash[:16]}... | Time: {pf.timestamp}")
+
+    db_context_str = "\n".join(db_context_lines)
+
+    reply = await agent_instance.chat(req.message, req.history, db_context=db_context_str)
     return {
         "reply": reply,
         "provider": settings.LLM_PROVIDER,
@@ -1083,6 +1237,12 @@ async def stream_agent_execution(run_id: str, session: Session = Depends(get_ses
             pass
 
     async def event_generator():
+        if settings.GITHUB_TOKEN:
+            os.environ["GITHUB_TOKEN"] = settings.GITHUB_TOKEN
+            agent_instance.github.token = settings.GITHUB_TOKEN
+            if hasattr(agent_instance, "executor") and hasattr(agent_instance.executor, "github"):
+                agent_instance.executor.github.token = settings.GITHUB_TOKEN
+
         async for event in agent_instance.execute_run_stream(
             prompt="Autonomous EC2 Deployment with .env injection",
             target_repo=target_repo,

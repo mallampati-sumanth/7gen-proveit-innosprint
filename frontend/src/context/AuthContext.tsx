@@ -206,6 +206,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       saveAuthSession(data.access_token, data.user);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("proveit_github_pat", ghToken.trim());
+      }
       return true;
     } catch (err: any) {
       setError(err.message || "GitHub authentication error.");
@@ -282,6 +285,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (typeof window !== "undefined") {
       localStorage.removeItem("proveit_token");
       localStorage.removeItem("proveit_user");
+      localStorage.removeItem("proveit_github_pat");
     }
   };
 
