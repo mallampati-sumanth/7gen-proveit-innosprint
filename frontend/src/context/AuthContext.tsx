@@ -38,30 +38,71 @@ export interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedUser = localStorage.getItem("proveit_user");
+        const storedToken = localStorage.getItem("proveit_token");
+        if (storedToken && storedUser) {
+          return {
+            user_id: "usr_cached",
+            username: storedUser,
+            email: `${storedUser}@proveit.cloud`,
+            auth_provider: "email",
+            is_admin: storedUser === "admin",
+          };
+        }
+      } catch {}
+    }
+    return null;
+  });
+
+  const [token, setToken] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const t = localStorage.getItem("proveit_token");
+        if (t) setAuthToken(t);
+        return t;
+      } catch {}
+    }
+    return null;
+  });
+
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return false;
+    }
+    return true;
+  });
+
   const [error, setError] = useState<string | null>(null);
 
   const clearError = () => setError(null);
 
-  // Validate existing stored token on mount
+  // Validate existing stored token on mount in background
   useEffect(() => {
+    let active = true;
+
+    // Safety fallback timer: Ensure loading never hangs beyond 1.2s
+    const safetyTimer = setTimeout(() => {
+      if (active) setLoading(false);
+    }, 1200);
+
     const initAuth = async () => {
       try {
         if (typeof window === "undefined") {
-          setLoading(false);
+          if (active) setLoading(false);
           return;
         }
 
         const storedToken = localStorage.getItem("proveit_token");
         const storedUser = localStorage.getItem("proveit_user");
         if (!storedToken) {
-          setLoading(false);
+          if (active) setLoading(false);
           return;
         }
 
-        if (storedUser) {
+        if (storedUser && active) {
           setUser({
             user_id: "usr_cached",
             username: storedUser,
@@ -71,49 +112,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
           setToken(storedToken);
           setAuthToken(storedToken);
+          setLoading(false);
         }
 
-        const res = await fetch(`${API_BASE}/api/auth/me`, {
-          headers: {
-            Authorization: `Bearer ${storedToken}`,
-          },
-        });
+        // Background verification with AbortController timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-        if (res.ok) {
-          const userData = await res.json();
-          setUser(userData);
-          setToken(storedToken);
-          setAuthToken(storedToken);
-        } else {
-          // Token invalid or expired
-          localStorage.removeItem("proveit_token");
-          localStorage.removeItem("proveit_user");
-          setUser(null);
-          setToken(null);
-          setAuthToken("");
+        try {
+          const res = await fetch(`${API_BASE}/api/auth/me`, {
+            headers: {
+              Authorization: `Bearer ${storedToken}`,
+            },
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+
+          if (res.ok) {
+            const userData = await res.json();
+            if (active) {
+              setUser(userData);
+              setToken(storedToken);
+              setAuthToken(storedToken);
+            }
+          } else if (res.status === 401) {
+            // Token definitely expired or revoked
+            localStorage.removeItem("proveit_token");
+            localStorage.removeItem("proveit_user");
+            if (active) {
+              setUser(null);
+              setToken(null);
+              setAuthToken("");
+            }
+          }
+        } catch (fetchErr) {
+          clearTimeout(timeoutId);
+          // If network / timeout, keep cached offline user session
         }
       } catch (err) {
-        console.warn("Failed to verify authentication session:", err);
-        // Fallback to offline stored state if backend is momentarily unreachable
-        const storedUser = localStorage.getItem("proveit_user");
-        const storedToken = localStorage.getItem("proveit_token");
-        if (storedToken && storedUser) {
-          setUser({
-            user_id: "usr_cached",
-            username: storedUser,
-            email: `${storedUser}@proveit.cloud`,
-            auth_provider: "email",
-            is_admin: storedUser === "admin",
-          });
-          setToken(storedToken);
-          setAuthToken(storedToken);
-        }
+        console.warn("Auth initialization notice:", err);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     initAuth();
+
+    return () => {
+      active = false;
+      clearTimeout(safetyTimer);
+    };
   }, []);
 
   const saveAuthSession = (t: string, u: AuthUser) => {

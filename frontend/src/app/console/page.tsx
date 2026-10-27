@@ -49,6 +49,13 @@ const WELCOME_MESSAGE: Message = {
 
 function MainApp() {
   const { user, loading, logout } = useAuth();
+  const [authChecking, setAuthChecking] = useState(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => setAuthChecking(false), 800);
+    return () => clearTimeout(t);
+  }, []);
+
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [view, setView] = useState("chat");
   const [target, setTarget] = useState<EnvTarget>("production");
@@ -619,7 +626,7 @@ function MainApp() {
     setProvisionModalOpen(true);
   };
 
-  if (loading) {
+  if (loading && authChecking && !user) {
     return (
       <div style={{
         minHeight: "100vh",

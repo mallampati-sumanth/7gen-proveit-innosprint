@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ClientProviders } from "@/context/ClientProviders";
 
 export const metadata: Metadata = {
   title: "ProveIt - Autonomous AWS Deployment Agent",
@@ -33,7 +34,9 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        <ClientProviders>{children}</ClientProviders>
+      </body>
     </html>
   );
 }

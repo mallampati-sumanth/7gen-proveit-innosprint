@@ -417,22 +417,12 @@ function LandingContent() {
           </div>
           <div className="sai-nav-actions">
             {mounted && user ? (
-              <>
-                <a href={APP} className="sai-user-chip" title={`Signed in as @${user.username}`}>
-                  <span className="sai-user-dot" />
-                  <span>@{user.username}</span>
-                </a>
-                <button
-                  type="button"
-                  onClick={() => logout()}
-                  className="sai-btn-signout"
-                  title="Sign out"
-                >
-                  Sign Out
-                </button>
-              </>
+              <a href={APP} className="sai-user-chip" title={`Signed in as @${user.username}`}>
+                <span className="sai-user-dot" />
+                <span>@{user.username}</span>
+              </a>
             ) : (
-              !user && <a href={SIGNIN} className="sai-btn-out">Sign In</a>
+              !loading && !user && <a href={SIGNIN} className="sai-btn-out">Sign In</a>
             )}
             <a href={APP} className="sai-btn-blk">Go to Dashboard <IcoArrow s={13} c="#fff" /></a>
           </div>
