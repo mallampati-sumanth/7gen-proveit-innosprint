@@ -201,6 +201,19 @@ You help engineers connect GitHub repositories, inspect architecture, configure 
             }
             await asyncio.sleep(0.4)
 
+            # Check if this stage failed; if so, halt pipeline and emit RUN_ERROR with root cause
+            is_err = isinstance(result, dict) and (result.get("status") == "error" or bool(result.get("error")))
+            if is_err:
+                err_msg = result.get("error") or result.get("message") or f"Deployment halted: failure during {tool_name}"
+                yield {
+                    "type": "RUN_ERROR",
+                    "run_id": run_id,
+                    "error": err_msg,
+                    "failed_stage": tool_name,
+                    "timestamp": time.time(),
+                }
+                return
+
         # 3. Final Cryptographic Proof & Summary
         port = context.get("port", 3000)
         app_url = f"http://{ec2_ip}:{port}"

@@ -446,7 +446,7 @@ def save_repository_env(
                 repo_id=repo_clean,
                 environment=req.environment,
                 key=v.key.strip(),
-                value=v.value.strip(),
+                value=v.value.strip().strip("'\""),
                 category=v.category or "APP",
                 is_secret=bool(v.is_secret),
             )
@@ -1040,7 +1040,7 @@ def start_deployment(req: DeployRequest, session: Session = Depends(get_session)
                 RepoEnvVar.environment == req.environment,
             )
         ).all()
-        injected = {e.key: e.value for e in repo_envs}
+        injected = {e.key: e.value.strip("'\"") for e in repo_envs}
 
     run = Run(
         run_id=run_id,

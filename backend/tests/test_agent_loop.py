@@ -8,6 +8,7 @@ from proveit_model.tools.aws_tools import AWSTools
 from proveit_model.agent.analyzer_agent import RepoAnalyzerAgent
 from proveit_model.agent.loop import ProveItAgent
 from proveit_model.providers.base import BaseLLMProvider, AgentMessage
+from backend.app.config import settings
 
 
 class MockLLMProvider(BaseLLMProvider):
@@ -55,7 +56,7 @@ def test_tools_registry_definitions():
 @pytest.mark.asyncio
 async def test_tools_registry_execution():
     provider = MockLLMProvider()
-    github = GitHubTools()
+    github = GitHubTools(token=settings.GITHUB_TOKEN)
     aws = AWSTools(region="us-east-1", mock_mode=True)
     guard = BlastRadiusGuard()
     analyzer = RepoAnalyzerAgent(provider=provider)
@@ -72,7 +73,7 @@ async def test_tools_registry_execution():
 
 @pytest.mark.asyncio
 async def test_autonomous_react_loop_streaming():
-    agent = ProveItAgent(cloud_mode="mock", llm_provider="groq")
+    agent = ProveItAgent(cloud_mode="mock", llm_provider="groq", github_token=settings.GITHUB_TOKEN)
     agent.provider = MockLLMProvider()
     agent.analyzer.provider = MockLLMProvider()
     
