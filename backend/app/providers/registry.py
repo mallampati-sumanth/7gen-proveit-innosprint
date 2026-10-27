@@ -6,6 +6,8 @@ from backend.app.providers.railway_provider import RailwayProvider
 
 
 class CloudProviderRegistry:
+    _instance: Optional["CloudProviderRegistry"] = None
+
     def __init__(self):
         self.providers: Dict[str, BaseCloudProvider] = {
             "vercel": VercelProvider(),
@@ -13,8 +15,19 @@ class CloudProviderRegistry:
             "railway": RailwayProvider(),
         }
 
-    def get_provider(self, name: str) -> Optional[BaseCloudProvider]:
-        return self.providers.get(name.lower().strip())
+    @classmethod
+    def get_instance(cls) -> "CloudProviderRegistry":
+        if cls._instance is None:
+            cls._instance = CloudProviderRegistry()
+        return cls._instance
+
+    @classmethod
+    def get_provider(cls, name: str) -> Optional[BaseCloudProvider]:
+        return cls.get_instance().providers.get(name.lower().strip())
+
+    @classmethod
+    def recommend(cls, repo_name: str, detected_language: Optional[str] = None, framework: Optional[str] = None) -> Dict[str, Any]:
+        return cls.get_instance().recommend_provider(repo_name, detected_language, framework)
 
     def list_providers(self) -> List[Dict[str, Any]]:
         return [
