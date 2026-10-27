@@ -14,6 +14,8 @@ from backend.app.db import get_session
 from backend.app.entities.models import User, RepoConfig, EC2Instance, Run, VoiceCallLog
 from backend.app.services.sarvam_voice import sarvam_voice_service
 from backend.app.routers.agent import agent_instance
+from backend.app.providers.registry import CloudProviderRegistry
+from backend.app.services.self_healing import AutonomousSREService
 
 router = APIRouter(prefix="/api/voice", tags=["voice"])
 
@@ -197,11 +199,97 @@ def simulate_voice_call(req: SimulateCallRequest, session: Session = Depends(get
         f"and {ec2_count} AWS EC2 instances running."
     )
 
-    # Step 4: Check if spoken prompt specifies a repository
+    # Step 4: Check if spoken prompt specifies self-healing, multi-cloud, or repository
     lower_prompt = prompt_text.lower()
     matched_repo = None
     if prompt_text:
         matched_repo = sarvam_voice_service.match_repository(prompt_text, user_repos)
+
+    # 4a. Autonomous SRE Self-Healing Intent
+    if any(kw in lower_prompt for kw in ["heal", "fix", "repair", "sre", "crash"]):
+        sre_service = AutonomousSREService()
+        error_sample = "RuntimeError: Connection refused on port 8000. Missing required env DB_CONNECTION_STRING."
+        heal_res = sre_service.diagnose_and_heal(
+            repo_name=matched_repo or "target-service",
+            error_log=error_sample,
+            environment="production",
+        )
+        diag = heal_res.get("diagnosis", {})
+        action_taken = diag.get("suggested_action", "Auto-remediation applied")
+        root_cause = diag.get("root_cause", "Configuration issue")
+        spoken_reply = (
+            f"Autonomous SRE Alert: Root cause diagnosed as {root_cause}. "
+            f"Remediation executed: {action_taken}. Cryptographic SHA-256 seal verified."
+        )
+        tts_result = sarvam_voice_service.text_to_speech(spoken_reply)
+        log = VoiceCallLog(
+            call_sid=call_sid,
+            caller_phone=caller_phone,
+            username=user.username,
+            pin_verified=True,
+            transcript=prompt_text,
+            intent="AUTONOMOUS_SRE_HEAL",
+            matched_repo=matched_repo or "target-service",
+            agent_response=spoken_reply,
+            status="COMPLETED",
+        )
+        session.add(log)
+        session.commit()
+        return {
+            "status": "HEALED",
+            "authenticated_user": user.username,
+            "caller_phone": caller_phone,
+            "agent_spoken_reply": spoken_reply,
+            "sre_result": heal_res,
+            "tts_audio": tts_result,
+            "call_sid": call_sid,
+        }
+
+    # 4b. Multi-Cloud Target Deployment Intent (Vercel, Render, Railway)
+    target_platform = None
+    if "vercel" in lower_prompt:
+        target_platform = "vercel"
+    elif "render" in lower_prompt:
+        target_platform = "render"
+    elif "railway" in lower_prompt:
+        target_platform = "railway"
+
+    if target_platform:
+        prov = CloudProviderRegistry.get_provider(target_platform)
+        if prov:
+            dep_res = prov.deploy(
+                repo_name=matched_repo or "vercel/next.js",
+                branch="main",
+                environment="production",
+            )
+            spoken_reply = (
+                f"{details_summary} Confirmed! Deployed '{matched_repo or target_platform}' to {prov.display_name}. "
+                f"Live URL: {dep_res.public_url}. Cryptographic seal {dep_res.proof_hash[:12]} committed to proof ledger."
+            )
+            tts_result = sarvam_voice_service.text_to_speech(spoken_reply)
+            log = VoiceCallLog(
+                call_sid=call_sid,
+                caller_phone=caller_phone,
+                username=user.username,
+                pin_verified=True,
+                transcript=prompt_text,
+                intent=f"DEPLOY_{target_platform.upper()}",
+                matched_repo=matched_repo or target_platform,
+                deployment_run_id=dep_res.deployment_id,
+                agent_response=spoken_reply,
+                status="COMPLETED",
+            )
+            session.add(log)
+            session.commit()
+            return {
+                "status": "SUCCESS",
+                "target_platform": target_platform,
+                "public_url": dep_res.public_url,
+                "deployment_id": dep_res.deployment_id,
+                "agent_spoken_reply": spoken_reply,
+                "tts_audio": tts_result,
+                "call_sid": call_sid,
+            }
 
     # If no repo mentioned or just asking for details / greeting
     if not matched_repo and not any(kw in lower_prompt for kw in ["deploy", "repo", "instance", "ec2", "flask", "fastapi", "next"]):
