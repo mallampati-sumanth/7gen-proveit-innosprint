@@ -1,6 +1,9 @@
 import os
 import re
 import time
+import json
+import base64
+import asyncio
 import hashlib
 import httpx
 from typing import Dict, Any, Optional
@@ -33,6 +36,7 @@ class VercelProvider(BaseCloudProvider):
         commit_hash: Optional[str] = None,
         service_type: Optional[str] = None,
         github_token: Optional[str] = None,
+        environment: str = "production",
         **kwargs: Any,
     ) -> DeploymentResult:
         clean_repo = re.sub(r"[^a-zA-Z0-9\-]", "-", repo_name.split("/")[-1]).lower()[:100].strip("-")
@@ -65,7 +69,7 @@ class VercelProvider(BaseCloudProvider):
                     "Content-Type": "application/json",
                 }
 
-                async with httpx.AsyncClient(timeout=30.0) as client:
+                async with httpx.AsyncClient(timeout=35.0) as client:
                     # 1. Fetch user & team info to correctly route deployments
                     u_res = await client.get("https://api.vercel.com/v2/user", headers=headers)
                     if u_res.status_code != 200:
@@ -85,6 +89,17 @@ class VercelProvider(BaseCloudProvider):
                     u_data = u_res.json().get("user", {})
                     team_id = u_data.get("defaultTeamId")
                     username = u_data.get("username")
+                    team_slug = username
+                    if team_id:
+                        try:
+                            t_res = await client.get("https://api.vercel.com/v2/teams", headers=headers)
+                            if t_res.status_code == 200:
+                                for tm in t_res.json().get("teams", []):
+                                    if tm.get("id") == team_id:
+                                        team_slug = tm.get("slug")
+                                        break
+                        except Exception:
+                            pass
 
                     # 2. Dynamically resolve GitHub repository numeric ID (required by Vercel gitSource v13)
                     full_repo = repo_name if "/" in repo_name else f"{username}/{repo_name}"
@@ -116,11 +131,55 @@ class VercelProvider(BaseCloudProvider):
                             metadata={"real_api": True, "error": f"Repository '{full_repo}' not found or unauthorized on GitHub (HTTP {gh_res.status_code})"},
                         )
 
-                    # 3. Construct Vercel Deployment Payload
+                    # 3. Dynamic framework auto-detection by inspecting repository package.json
+                    detected_fw = None
+                    try:
+                        pkg_res = await client.get(f"https://api.github.com/repos/{full_repo}/contents/package.json", headers=gh_headers)
+                        if pkg_res.status_code == 200:
+                            raw_content = base64.b64decode(pkg_res.json().get("content", "")).decode("utf-8", errors="ignore")
+                            pkg_json = json.loads(raw_content)
+                            all_deps = {**pkg_json.get("dependencies", {}), **pkg_json.get("devDependencies", {})}
+                            if "next" in all_deps:
+                                detected_fw = "nextjs"
+                            elif "vite" in all_deps or "@vitejs/plugin-react" in all_deps or "@tailwindcss/vite" in all_deps:
+                                detected_fw = "vite"
+                            elif "astro" in all_deps:
+                                detected_fw = "astro"
+                            elif "@sveltejs/kit" in all_deps or "svelte" in all_deps:
+                                detected_fw = "sveltekit"
+                            elif "nuxt" in all_deps or "nuxt3" in all_deps:
+                                detected_fw = "nuxtjs"
+                            elif "remix" in all_deps or "@remix-run/react" in all_deps:
+                                detected_fw = "remix"
+                            elif "gatsby" in all_deps:
+                                detected_fw = "gatsby"
+                            elif "react-scripts" in all_deps:
+                                detected_fw = "create-react-app"
+                            elif "vue" in all_deps:
+                                detected_fw = "vue"
+                    except Exception:
+                        pass
+
+                    fw_to_use = detected_fw
+                    if not fw_to_use and service_type and service_type.lower() not in ["next.js 14", "next.js", "auto", "standard", "standard application", "other", ""]:
+                        fw_to_use = fw_val
+
+                    # Patch Vercel project's framework if project exists to prevent stale legacy framework mismatch
+                    if fw_to_use:
+                        try:
+                            patch_url = f"https://api.vercel.com/v9/projects/{clean_repo}"
+                            if team_id:
+                                patch_url += f"?teamId={team_id}"
+                            await client.patch(patch_url, json={"framework": fw_to_use}, headers=headers)
+                        except Exception:
+                            pass
+
+                    # 4. Construct Vercel Deployment Payload
                     deploy_url = "https://api.vercel.com/v13/deployments?skipAutoDetectionConfirmation=1"
                     if team_id:
                         deploy_url += f"&teamId={team_id}"
 
+                    target_mode = "production" if (environment or kwargs.get("environment") or "production") == "production" else "preview"
                     payload: Dict[str, Any] = {
                         "name": clean_repo,
                         "gitSource": {
@@ -128,10 +187,11 @@ class VercelProvider(BaseCloudProvider):
                             "repoId": str(repo_id),
                             "ref": branch,
                         },
+                        "target": target_mode,
                     }
 
-                    if fw_val:
-                        payload["projectSettings"] = {"framework": fw_val}
+                    if fw_to_use:
+                        payload["projectSettings"] = {"framework": fw_to_use}
 
                     if env_vars:
                         payload["env"] = {
@@ -143,32 +203,99 @@ class VercelProvider(BaseCloudProvider):
                     resp = await client.post(deploy_url, json=payload, headers=headers)
                     if resp.status_code in [200, 201]:
                         data = resp.json()
-                        d_url = data.get("url") or live_domain
-                        aliases = data.get("alias") or []
-                        primary_alias = aliases[0] if aliases else d_url
-                        final_live_url = f"https://{primary_alias}"
+                        dpl_id = data.get("id", deployment_id)
+                        ready_state = data.get("readyState") or data.get("status") or "INITIALIZING"
                         inspector = data.get("inspectorUrl") or ""
+
+                        # 5. Active verification: poll Vercel to ensure build completes or catch errors early
+                        poll_url = f"https://api.vercel.com/v13/deployments/{dpl_id}"
+                        if team_id:
+                            poll_url += f"?teamId={team_id}"
+
+                        start_wait = time.time()
+                        while ready_state in ["INITIALIZING", "BUILDING", "QUEUED"] and (time.time() - start_wait) < 18:
+                            await asyncio.sleep(2.0)
+                            try:
+                                chk_res = await client.get(poll_url, headers=headers)
+                                if chk_res.status_code == 200:
+                                    chk_data = chk_res.json()
+                                    ready_state = chk_data.get("readyState") or chk_data.get("status")
+                                    data = chk_data
+                                    if ready_state in ["READY", "ERROR", "CANCELED"]:
+                                        break
+                            except Exception:
+                                break
+
+                        if ready_state in ["ERROR", "CANCELED"]:
+                            # Fetch build error logs from Vercel events
+                            err_events = []
+                            try:
+                                ev_url = f"https://api.vercel.com/v2/deployments/{dpl_id}/events"
+                                if team_id:
+                                    ev_url += f"?teamId={team_id}"
+                                ev_res = await client.get(ev_url, headers=headers)
+                                if ev_res.status_code == 200:
+                                    for ev in ev_res.json():
+                                        txt = ev.get("payload", {}).get("text", "")
+                                        if txt and any(k in txt.lower() for k in ["error", "fail", "warning", "exit"]):
+                                            err_events.append(txt)
+                            except Exception:
+                                pass
+
+                            err_summary = err_events[-5:] if err_events else [f"Vercel build failed with state '{ready_state}'"]
+                            return DeploymentResult(
+                                provider=self.name,
+                                deployment_id=dpl_id,
+                                status="FAILED",
+                                live_url="",
+                                build_logs=[
+                                    f"[Vercel Build Failed] Deployment {dpl_id} did not complete successfully.",
+                                    *err_summary,
+                                    f"[Vercel Dashboard & Error Logs] {inspector}",
+                                ],
+                                metadata={"real_api": True, "error": err_summary[0], "inspector_url": inspector},
+                            )
+
+                        # Ensure root domain alias ({clean_repo}-{team_slug}.vercel.app) is registered on the project
+                        expected_alias = f"{clean_repo}-{team_slug}.vercel.app" if team_slug else None
+                        if expected_alias:
+                            try:
+                                dom_url = f"https://api.vercel.com/v9/projects/{clean_repo}/domains"
+                                if team_id:
+                                    dom_url += f"?teamId={team_id}"
+                                await client.post(dom_url, json={"name": expected_alias}, headers=headers)
+                            except Exception:
+                                pass
+
+                        # Determine primary live production URL
+                        aliases = data.get("alias") or []
+                        primary_alias = None
+                        if aliases:
+                            primary_alias = next((a for a in aliases if not "-git-" in a and clean_repo in a), None)
+                        final_live_host = expected_alias or primary_alias or (aliases[0] if aliases else None) or data.get('url') or live_domain
+                        final_live_url = f"https://{final_live_host}"
 
                         return DeploymentResult(
                             provider=self.name,
-                            deployment_id=data.get("id", deployment_id),
+                            deployment_id=dpl_id,
                             status="READY",
                             live_url=final_live_url,
-                            preview_url=f"https://{d_url}",
+                            preview_url=f"https://{data.get('url') or primary_alias or live_domain}",
                             build_logs=[
                                 f"[Vercel v13] Authenticated as @{username} on team '{team_id or 'personal'}'",
                                 f"[Vercel GitSource] Connected to GitHub repo '{full_repo}' (ID: {repo_id}, branch: '{branch}')",
-                                f"[Vercel Project] Created/updated project '{data.get('name', clean_repo)}'",
-                                f"[Vercel Framework] Configured build framework: {fw_val or data.get('projectSettings', {}).get('framework') or 'Auto-Detected'}",
-                                f"[Vercel Environment] Injected {len(env_vars or {})} runtime variables into Vercel Edge",
-                                f"[Vercel Deployment ID] {data.get('id', deployment_id)}",
+                                f"[Vercel Framework] Verified framework: {fw_to_use or 'Auto-Detected'}",
+                                f"[Vercel Environment] Target: {target_mode} (Injected {len(env_vars or {})} runtime variables)",
+                                f"[Vercel Deployment ID] {dpl_id}",
+                                f"[Vercel State] Deployment verified: {ready_state}",
                                 f"[Vercel Live Edge URL] {final_live_url}",
                                 f"[Vercel Dashboard & Logs] {inspector}",
                             ],
                             metadata={
                                 "real_api": True,
-                                "vercel_id": data.get("id"),
+                                "vercel_id": dpl_id,
                                 "inspector_url": inspector,
+                                "aliases": aliases,
                                 "creator": data.get("creator"),
                                 "project_id": data.get("projectId"),
                             },

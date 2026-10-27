@@ -90,7 +90,7 @@ class RepoAddRequest(BaseModel):
     owner: Optional[str] = "7gen"
     description: Optional[str] = None
     lang: Optional[str] = "TypeScript"
-    framework: Optional[str] = "Next.js 14"
+    framework: Optional[str] = None
     port: Optional[int] = 3000
     clone_url: Optional[str] = None
 

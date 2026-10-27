@@ -49,6 +49,7 @@ class BaseCloudProvider(ABC):
         commit_hash: Optional[str] = None,
         service_type: Optional[str] = None,
         github_token: Optional[str] = None,
+        environment: str = "production",
         **kwargs: Any,
     ) -> DeploymentResult:
         """Triggers deployment and returns DeploymentResult with live URL or status."""

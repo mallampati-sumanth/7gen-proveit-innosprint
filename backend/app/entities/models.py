@@ -87,7 +87,7 @@ class RepoConfig(SQLModel, table=True):
     clone_url: Optional[str] = None
     default_branch: str = Field(default="main")
     language: str = Field(default="TypeScript")
-    framework: Optional[str] = Field(default="Next.js 14")
+    framework: Optional[str] = Field(default=None)
     default_port: int = Field(default=3000)
     healthcheck_path: str = Field(default="/health")
     is_connected: bool = Field(default=True)

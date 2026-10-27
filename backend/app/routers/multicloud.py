@@ -109,6 +109,7 @@ async def deploy_to_cloud(req: MultiCloudDeployRequest, session: Session = Depen
             commit_hash=req.commit_hash,
             service_type=active_framework,
             github_token=active_gh_token,
+            environment=target_env,
         )
         live_url = result.live_url or ""
         dpl_id = result.deployment_id
