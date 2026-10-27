@@ -22,6 +22,7 @@ export const EC2FleetTab = ({
   const [adding, setAdding] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [powerActionId, setPowerActionId] = useState<string | null>(null);
+  const [terminatingId, setTerminatingId] = useState<string | null>(null);
 
   const handleManualRefresh = async () => {
     setRefreshing(true);
@@ -39,6 +40,24 @@ export const EC2FleetTab = ({
       await onRefresh();
     } catch {}
     setPowerActionId(null);
+  };
+
+  const handleTerminate = async (inst: EC2InstanceItem) => {
+    const isMock = inst.instance_id.startsWith("i-0a8f") || inst.instance_id.startsWith("i-0b7e");
+    const promptMsg = isMock
+      ? `Remove simulated node ${inst.name} (${inst.instance_id}) from fleet?`
+      : `⚠️ PERMANENT AWS ACTION:\nAre you sure you want to terminate and permanently delete instance ${inst.name} (${inst.instance_id}) in AWS region ${inst.region}?\nThis action cannot be undone.`;
+    if (!confirm(promptMsg)) return;
+
+    setTerminatingId(inst.instance_id);
+    try {
+      await fetch(`${API_BASE}/api/agent/ec2/instances/${inst.instance_id}/terminate`, { method: "POST" });
+      await onRefresh();
+    } catch (err: any) {
+      alert(err.message || "Failed to terminate instance.");
+    } finally {
+      setTerminatingId(null);
+    }
   };
 
   const testInstance = async (inst: EC2InstanceItem) => {
@@ -216,32 +235,66 @@ export const EC2FleetTab = ({
                 </div>
               )}
 
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: "auto" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: "auto" }}>
                 <button onClick={() => testInstance(inst)} disabled={testingId === inst.instance_id} style={{
-                  flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)",
+                  padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)",
                   background: "var(--bg-card2)", color: "var(--text-1)", fontSize: 12, fontWeight: 600, cursor: "pointer",
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
                 }}>
-                  {testingId === inst.instance_id ? <><I.Loader /> Ping…</> : <><I.Terminal /> Ping EC2</>}
+                  {testingId === inst.instance_id ? <><I.Loader /> Ping…</> : <><I.Terminal /> Ping</>}
                 </button>
 
-                {isStopped ? (
+                {isRunning ? (
+                  <>
+                    <button onClick={() => onDeployToInstance(inst)} style={{
+                      flex: 1, minWidth: 80, padding: "8px 12px", borderRadius: 8, border: "none",
+                      background: "var(--orange)", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                    }}>
+                      <I.Play /> Deploy
+                    </button>
+                    <button onClick={() => handlePowerAction(inst.instance_id, "stop")} disabled={powerActionId === inst.instance_id} style={{
+                      padding: "8px 12px", borderRadius: 8, border: "1px solid var(--orange-border)",
+                      background: "var(--orange-bg)", color: "var(--orange)", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                    }}>
+                      {powerActionId === inst.instance_id ? <><I.Loader /> Stopping…</> : "Stop Node"}
+                    </button>
+                  </>
+                ) : isStopped ? (
                   <button onClick={() => handlePowerAction(inst.instance_id, "start")} disabled={powerActionId === inst.instance_id} style={{
-                    flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--green)",
+                    flex: 1, minWidth: 100, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--green)",
                     background: "var(--green-bg)", color: "var(--green)", fontSize: 12, fontWeight: 700, cursor: "pointer",
                     display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
                   }}>
                     {powerActionId === inst.instance_id ? <><I.Loader /> Starting…</> : <><I.Play /> Start Node</>}
                   </button>
                 ) : (
-                  <button onClick={() => onDeployToInstance(inst)} style={{
-                    flex: 1, padding: "8px 14px", borderRadius: 8, border: "none",
-                    background: "var(--orange)", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                  <button disabled style={{
+                    flex: 1, minWidth: 100, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)",
+                    background: "var(--bg-input)", color: "var(--text-3)", fontSize: 12, fontWeight: 600,
                     display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
                   }}>
-                    <I.Play /> Deploy Here
+                    <I.Loader /> Updating…
                   </button>
                 )}
+
+                <button
+                  onClick={() => handleTerminate(inst)}
+                  disabled={terminatingId === inst.instance_id}
+                  title="Terminate & Delete EC2 Node"
+                  style={{
+                    padding: "8px 10px", borderRadius: 8,
+                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                    background: "rgba(239, 68, 68, 0.08)",
+                    color: "var(--red)",
+                    fontSize: 12, fontWeight: 700, cursor: terminatingId === inst.instance_id ? "not-allowed" : "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+                  }}
+                >
+                  {terminatingId === inst.instance_id ? <I.Loader /> : <I.Trash />}
+                  <span style={{ fontSize: 11 }}>Terminate</span>
+                </button>
               </div>
             </div>
           );

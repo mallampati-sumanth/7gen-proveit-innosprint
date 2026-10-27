@@ -787,7 +787,8 @@ def start_ec2_instance(instance_id: str, session: Session = Depends(get_session)
     """Start a stopped EC2 instance in AWS."""
     inst = session.exec(select(EC2Instance).where(EC2Instance.instance_id == instance_id)).first()
     has_aws_creds = bool(settings.AWS_ACCESS_KEY_ID and not settings.AWS_ACCESS_KEY_ID.startswith("your_"))
-    if has_aws_creds and not instance_id.startswith("i-0a8f") and not instance_id.startswith("i-0b7e"):
+    is_real_aws = instance_id.startswith("i-") and len(instance_id) >= 17 and not instance_id.startswith("i-0a8f") and not instance_id.startswith("i-0b7e")
+    if has_aws_creds and is_real_aws:
         try:
             import boto3
             ec2 = boto3.client("ec2", region_name=settings.AWS_REGION)
@@ -811,7 +812,8 @@ def stop_ec2_instance(instance_id: str, session: Session = Depends(get_session))
     """Stop a running EC2 instance in AWS."""
     inst = session.exec(select(EC2Instance).where(EC2Instance.instance_id == instance_id)).first()
     has_aws_creds = bool(settings.AWS_ACCESS_KEY_ID and not settings.AWS_ACCESS_KEY_ID.startswith("your_"))
-    if has_aws_creds and not instance_id.startswith("i-0a8f") and not instance_id.startswith("i-0b7e"):
+    is_real_aws = instance_id.startswith("i-") and len(instance_id) >= 17 and not instance_id.startswith("i-0a8f") and not instance_id.startswith("i-0b7e")
+    if has_aws_creds and is_real_aws:
         try:
             import boto3
             ec2 = boto3.client("ec2", region_name=settings.AWS_REGION)
@@ -828,6 +830,34 @@ def stop_ec2_instance(instance_id: str, session: Session = Depends(get_session))
         session.add(inst)
         session.commit()
     return {"status": "STOPPING", "message": f"Simulated stop for {instance_id}."}
+
+
+@router.post("/ec2/instances/{instance_id}/terminate")
+@router.delete("/ec2/instances/{instance_id}")
+def terminate_ec2_instance(instance_id: str, session: Session = Depends(get_session)):
+    """Terminate and permanently delete an EC2 instance in AWS and clean from fleet."""
+    global LAST_EC2_DESCRIBE_TIME
+    LAST_EC2_DESCRIBE_TIME = 0  # Invalidate cache so next fleet list is fresh
+    inst = session.exec(select(EC2Instance).where(EC2Instance.instance_id == instance_id)).first()
+    has_aws_creds = bool(settings.AWS_ACCESS_KEY_ID and not settings.AWS_ACCESS_KEY_ID.startswith("your_"))
+    is_real_aws = instance_id.startswith("i-") and len(instance_id) >= 17 and not instance_id.startswith("i-0a8f") and not instance_id.startswith("i-0b7e")
+    
+    if has_aws_creds and is_real_aws:
+        try:
+            import boto3
+            ec2 = boto3.client("ec2", region_name=settings.AWS_REGION)
+            ec2.terminate_instances(InstanceIds=[instance_id])
+            if inst:
+                session.delete(inst)
+                session.commit()
+            return {"status": "TERMINATING", "message": f"Dispatched AWS Boto3 terminate command for {instance_id}."}
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to terminate instance in AWS: {e}")
+
+    if inst:
+        session.delete(inst)
+        session.commit()
+    return {"status": "TERMINATED", "message": f"Removed {instance_id} from fleet."}
 
 
 # ─────────── AUTONOMOUS DEPLOYMENT AGENT ───────────
