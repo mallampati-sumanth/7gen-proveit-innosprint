@@ -93,6 +93,12 @@ class Settings(BaseSettings):
     TELEPHONY_AGENT_PHONE: str = "+91 80 4736 1820"
     TELEPHONY_WEBHOOK_BASE_URL: Optional[str] = "http://localhost:8000"
 
+    # Multi-Cloud Providers (Vercel, Render, Railway)
+    VERCEL_TOKEN: Optional[str] = None
+    RENDER_API_KEY: Optional[str] = None
+    RAILWAY_TOKEN: Optional[str] = None
+    MULTICLOUD_SANDBOX_ENABLED: bool = True
+
     @field_validator("CORS_ORIGINS", "ALLOWED_REGIONS", "ALLOWED_INSTANCE_TYPES", mode="before")
     @classmethod
     def parse_json_list(cls, v):
@@ -118,4 +124,10 @@ elif "AWS_SESSION_TOKEN" in os.environ:
 if settings.AWS_REGION:
     os.environ["AWS_DEFAULT_REGION"] = settings.AWS_REGION
     os.environ["AWS_REGION"] = settings.AWS_REGION
+if settings.VERCEL_TOKEN:
+    os.environ["VERCEL_TOKEN"] = settings.VERCEL_TOKEN
+if settings.RENDER_API_KEY:
+    os.environ["RENDER_API_KEY"] = settings.RENDER_API_KEY
+if settings.RAILWAY_TOKEN:
+    os.environ["RAILWAY_TOKEN"] = settings.RAILWAY_TOKEN
 
