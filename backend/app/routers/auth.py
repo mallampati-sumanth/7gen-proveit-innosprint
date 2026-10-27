@@ -247,7 +247,7 @@ async def github_auth(req: GitHubAuthRequest, session: Session = Depends(get_ses
     """Authenticate or register user via GitHub OAuth code or Personal Access Token."""
     gh_token = req.token
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=15.0, verify=False) as client:
         # If OAuth authorization code was provided, exchange for access token
         if req.code:
             client_id = settings.GITHUB_CLIENT_ID

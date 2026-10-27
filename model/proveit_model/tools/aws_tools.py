@@ -595,7 +595,7 @@ docker run -d --restart unless-stopped --name proveit-live-app -p {app_port}:80 
         url = f"http://{public_ip}:{port}{health_path}"
         root_url = f"http://{public_ip}:{port}/"
         try:
-            with httpx.Client(timeout=3.0) as client:
+            with httpx.Client(timeout=3.0, verify=False) as client:
                 for target_url in [url, root_url]:
                     try:
                         res = client.get(target_url)

@@ -57,7 +57,7 @@ class AnthropicProvider(BaseLLMProvider):
                         })
                     payload["tools"] = anthropic_tools
 
-                async with httpx.AsyncClient(timeout=30.0) as client:
+                async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
                     res = await client.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload)
                     if res.status_code == 200:
                         data = res.json()

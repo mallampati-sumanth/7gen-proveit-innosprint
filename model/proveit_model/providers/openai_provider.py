@@ -95,7 +95,7 @@ class OpenAIProvider(BaseLLMProvider):
                     "User-Agent": "ProveIt-Agent/1.0",
                 }
 
-                async with httpx.AsyncClient(timeout=25.0) as http_client:
+                async with httpx.AsyncClient(timeout=25.0, verify=False) as http_client:
                     http_resp = await http_client.post(url, headers=headers, json=payload)
                     if http_resp.status_code == 200:
                         data = http_resp.json()
