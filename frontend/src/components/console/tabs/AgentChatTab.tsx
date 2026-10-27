@@ -104,7 +104,7 @@ export const AgentChatTab = ({
                 { fn: () => setView("analyze"), icon: <I.Scan />, label: "Stack" },
                 { fn: () => { if (onInjectEnv && selectedRepo) onInjectEnv(selectedRepo); else setView("repoenv"); }, icon: <I.Sliders />, label: ".env" },
                 { fn: () => setView("ec2"), icon: <I.Server />, label: "Fleet" },
-                { fn: () => setView("ledger"), icon: <I.Book />, label: "Ledger" }
+                { fn: () => setView("logs"), icon: <I.Terminal />, label: "Logs" }
               ].map(btn => (
                 <button
                   key={btn.label}

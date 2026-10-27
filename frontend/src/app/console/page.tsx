@@ -33,12 +33,9 @@ import { RepoEnvTab } from "@/components/console/tabs/RepoEnvTab";
 import { EC2FleetTab } from "@/components/console/tabs/EC2FleetTab";
 import { SecretsTab } from "@/components/console/tabs/SecretsTab";
 import { RepoAnalyzerTab } from "@/components/console/tabs/RepoAnalyzerTab";
-import { InfraTopologyTab } from "@/components/console/tabs/InfraTopologyTab";
 import { ActivityTab } from "@/components/console/tabs/ActivityTab";
 import { LogsTab } from "@/components/console/tabs/LogsTab";
 import { VoiceOpsTab } from "@/components/console/tabs/VoiceOpsTab";
-import { LedgerTab } from "@/components/console/tabs/LedgerTab";
-import { BenchmarkTab } from "@/components/console/tabs/BenchmarkTab";
 
 /* ─────────── WELCOME AGENT MESSAGE ─────────── */
 const WELCOME_MESSAGE: Message = {
@@ -503,8 +500,6 @@ function MainApp() {
                 />
               )}
 
-              {view === "infra" && <InfraTopologyTab />}
-
               {view === "activity" && (
                 <ActivityTab onDeployClick={() => setDeployModalOpen(true)} />
               )}
@@ -514,10 +509,6 @@ function MainApp() {
               {view === "voice" && (
                 <VoiceOpsTab currentUser={user.username} repos={repos} onDeployFromVoice={openDeployForRepo} />
               )}
-
-              {view === "ledger" && <LedgerTab />}
-
-              {view === "benchmark" && <BenchmarkTab />}
 
               {view === "settings" && <SettingsPanel theme={theme} setTheme={setTheme} />}
             </div>

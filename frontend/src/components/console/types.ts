@@ -164,19 +164,16 @@ export const THEME_VARS: Record<ThemeMode, Record<string, string>> = {
 
 /* ─────────── PAGE & NAV METADATA ─────────── */
 export const PAGE_META: Record<string, { title: string; sub: string; badge: string }> = {
-  chat: { title: "Autonomous Agent Console (SSE)", sub: "Deploy GitHub applications directly to EC2 with real-time reasoning and verification", badge: "Live Backend" },
-  voice: { title: "Sarvam AI VoiceOps & Phone Agent", sub: "Trigger autonomous AWS deployments via cellular phone call with caller authentication and Sarvam STT/TTS", badge: "Sarvam AI" },
-  repos: { title: "Connected GitHub Repositories", sub: "Explore user repos, inject custom .env configurations, and deploy to EC2 instances", badge: "GitHub API" },
-  repoenv: { title: "Per-Repository .env Injection Studio", sub: "Manage, auto-generate, and securely inject environment variables into individual repositories", badge: "Vault Encrypted" },
-  ec2: { title: "EC2 Instances Fleet Management", sub: "Connected AWS EC2 instances, SSH/SSM telemetry, Docker daemon state, and running apps", badge: "AWS Boto3" },
-  analyze: { title: "Repository Manifest & Stack Analyzer", sub: "Live inspection of runtime packages, ports, Dockerfiles, and recommended configs", badge: "Dynamic" },
-  infra: { title: "AWS Cloud Infrastructure Topology", sub: "Live snapshot across EC2, ECS Fargate, ECR Registry, and CloudWatch Logs", badge: "Telemetry" },
-  secrets: { title: "Credentials & Secrets Vault", sub: "Encrypted AWS IAM, GitHub Tokens, and Gemini API keys with live connection testers", badge: "AES-256" },
-  benchmark: { title: "Head-to-Head Benchmark Suite", sub: "Comparative evaluation: Plain LLM proposals vs ProveIt deterministic policy + sandbox across 6 failure scenarios", badge: "Evaluation" },
-  logs: { title: "Diagnostic Log Stream", sub: "Real-time streaming agent telemetry from FastAPI and AWS CloudWatch", badge: "Streaming" },
-  activity: { title: "Audit & Run History", sub: "Complete history of autonomous deployments, self-healing events, and verification checks", badge: "Database" },
-  ledger: { title: "Cryptographic Proof Ledger", sub: "Tamper-evident SHA-256 hash-chained proof records for every applied deployment fix", badge: "Immutable" },
-  settings: { title: "Platform Settings", sub: "Themes, blast radius safety gates, and cloud execution parameters", badge: "Control" },
+  chat: { title: "AI Cloud Architect", sub: "Autonomous EC2 deployment & verified self-healing agent", badge: "Live Backend" },
+  voice: { title: "VoiceOps Agent", sub: "Autonomous deployment trigger via Sarvam AI cellular voice telephony", badge: "Sarvam AI" },
+  repos: { title: "Code Repositories", sub: "Connected GitHub codebases, branches & manifests", badge: "GitHub API" },
+  repoenv: { title: "Environment Studio", sub: "Dynamic per-repository environment variables & secret injection", badge: "Vault Encrypted" },
+  ec2: { title: "Compute Fleet", sub: "AWS EC2 instances, SSH pre-flight, and container daemon runtime", badge: "AWS EC2" },
+  analyze: { title: "Stack Analyzer", sub: "Live inspection of runtime packages, ports, Dockerfiles, and manifests", badge: "Dynamic" },
+  secrets: { title: "Vault & Credentials", sub: "Encrypted AWS IAM, GitHub Tokens, and Gemini API keys", badge: "AES-256" },
+  logs: { title: "System Telemetry", sub: "Real-time streaming agent telemetry from FastAPI and AWS CloudWatch", badge: "Streaming" },
+  activity: { title: "Deploy History", sub: "Complete history of autonomous deployments, self-healing events & verification", badge: "Database" },
+  settings: { title: "Settings & Safety", sub: "Themes, blast radius safety gates, and cloud execution parameters", badge: "Control" },
 };
 
 /* ─────────── DEPLOYMENT STAGES META ─────────── */
