@@ -68,13 +68,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme })
       const ok = await updateProfile({
         name: profileName,
         phone_number: profilePhone,
+        voice_pin: voicePin,
       });
       if (ok) {
         setUserVoicePhone(profilePhone);
-        setProfileMsg({ type: "success", text: "Profile and Mobile Number updated successfully!" });
+        setProfileMsg({ type: "success", text: "Profile, Mobile Number, and Voice PIN updated successfully!" });
         setTimeout(() => setProfileMsg(null), 4000);
       } else {
-        setProfileMsg({ type: "error", text: "Failed to update profile. Please verify number format." });
+        setProfileMsg({ type: "error", text: "Failed to update profile. Please verify format." });
       }
     } catch (err: any) {
       setProfileMsg({ type: "error", text: err.message || "Could not update profile." });
@@ -565,8 +566,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme })
                   </span>
                 </div>
 
-                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                  <div style={{ flex: 1, minWidth: 240 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 140px auto", gap: 12, alignItems: "flex-end" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--text-2)", marginBottom: 6 }}>
+                      Mobile Number (Caller ID)
+                    </label>
                     <input
                       type="tel"
                       value={profilePhone}
@@ -588,11 +592,40 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme })
                     />
                   </div>
 
+                  <div>
+                    <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--text-2)", marginBottom: 6 }}>
+                      4-Digit PIN
+                    </label>
+                    <input
+                      type="password"
+                      maxLength={4}
+                      value={voicePin}
+                      onChange={(e) => setVoicePin(e.target.value.replace(/\D/g, ""))}
+                      placeholder="1234"
+                      style={{
+                        width: "100%",
+                        padding: "10px 14px",
+                        borderRadius: 8,
+                        background: "var(--bg-input)",
+                        border: "1px solid var(--border)",
+                        color: "var(--text-1)",
+                        fontSize: 16,
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontWeight: 700,
+                        letterSpacing: ".2em",
+                        textAlign: "center",
+                        outline: "none",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </div>
+
                   <button
                     onClick={handleSaveProfile}
                     disabled={savingProfile}
                     style={{
-                      padding: "10px 22px",
+                      height: 42,
+                      padding: "0 22px",
                       borderRadius: 8,
                       border: "none",
                       background: "var(--orange)",
@@ -604,10 +637,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme })
                       alignItems: "center",
                       gap: 7,
                       boxShadow: "0 2px 8px rgba(249, 115, 22, 0.25)",
+                      whiteSpace: "nowrap",
                     }}
                   >
                     {savingProfile ? <RefreshCw size={13} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                    <span>{savingProfile ? "Saving..." : "Save Mobile Number"}</span>
+                    <span>{savingProfile ? "Saving..." : "Save Credentials"}</span>
                   </button>
                 </div>
 
