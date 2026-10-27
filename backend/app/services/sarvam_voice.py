@@ -1,7 +1,9 @@
 import os
+import re
 import json
 import logging
 import requests
+from difflib import SequenceMatcher
 from typing import Optional, List, Dict, Any
 from backend.app.config import settings
 
@@ -119,37 +121,114 @@ class SarvamVoiceService:
             logger.error(f"Sarvam TTS failed: {e}")
             return {"status": "ERROR", "text": text, "error": str(e)}
 
-    def match_repository(self, speech_text: str, user_repos: List[str]) -> Optional[str]:
-        """Fuzzy match caller's spoken utterance against user's connected GitHub repos."""
+    def clean_spoken_query(self, query: str) -> str:
+        """Strips filler phrases and common voice commands from spoken utterances."""
+        filler_words = {
+            "deploy", "deployment", "launch", "check", "inspect", "run", "build",
+            "repository", "repo", "project", "app", "application", "the", "my",
+            "to", "in", "on", "a", "an", "for", "please", "can", "you", "start",
+            "open", "test", "find", "search", "what", "is", "about", "called",
+            "publish", "push", "serve", "host"
+        }
+        tokens = [w for w in re.sub(r"[^a-zA-Z0-9\s]", " ", (query or "").lower()).split() if w not in filler_words]
+        return " ".join(tokens).strip() or (query or "").lower().strip()
+
+    def score_repository_match(self, spoken_query: str, repo: str) -> float:
+        """
+        Calculates similarity between caller's spoken utterance and repository identifier.
+        Combines exact token equality, substring containment, compact alphanumeric matching,
+        and Levenshtein / SequenceMatcher ratio.
+        """
+        if not repo:
+            return 0.0
+        clean_q = self.clean_spoken_query(spoken_query)
+        q_compact = re.sub(r"[^a-z0-9]", "", clean_q)
+        repo_lower = repo.lower()
+        repo_short = repo_lower.split("/")[-1]
+        r_compact = re.sub(r"[^a-z0-9]", "", repo_short)
+
+        # 1. Exact match
+        if clean_q == repo_short or q_compact == r_compact:
+            return 1.0
+
+        # 2. Substring containment
+        if q_compact and r_compact:
+            if q_compact in r_compact:
+                return 0.88 + (len(q_compact) / max(len(r_compact), 1)) * 0.11
+            if r_compact in q_compact:
+                return 0.85 + (len(r_compact) / max(len(q_compact), 1)) * 0.14
+
+        # 3. Compact / SequenceMatcher similarity
+        sim_ratio = SequenceMatcher(None, clean_q, repo_short).ratio()
+        compact_ratio = SequenceMatcher(None, q_compact, r_compact).ratio() if q_compact and r_compact else 0.0
+
+        # 4. Token overlap
+        q_words = set(clean_q.split())
+        r_words = set(re.sub(r"[^a-z0-9\s]", " ", repo_lower).split())
+        overlap = len(q_words.intersection(r_words)) / max(len(q_words), 1) if q_words else 0.0
+
+        return round(max(sim_ratio, compact_ratio, overlap * 0.85), 3)
+
+    def search_repositories(
+        self,
+        query: str,
+        user_repos: List[str],
+        min_threshold: float = 0.35,
+    ) -> Dict[str, Any]:
+        """
+        Fuzzy searches user's repositories against what the caller said during a call.
+        Returns ranked candidate matches, match confidence, and whether high confidence match found.
+        """
         if not user_repos:
-            return None
+            return {
+                "found": False,
+                "query": query,
+                "clean_query": self.clean_spoken_query(query),
+                "matched_repo": None,
+                "confidence": 0.0,
+                "matches": [],
+            }
 
-        clean_text = speech_text.lower().replace("-", " ").replace("_", " ")
+        clean_q = self.clean_spoken_query(query)
+        scored = []
+        for r in user_repos:
+            score = self.score_repository_match(query, r)
+            scored.append({
+                "repo": r,
+                "short_name": r.split("/")[-1],
+                "score": score,
+            })
 
-        # 1. Exact or partial repo name match
-        for repo in user_repos:
-            repo_clean = repo.lower().replace("-", " ").replace("_", " ")
-            repo_short = repo_clean.split("/")[-1]
-            if repo_short in clean_text or repo_clean in clean_text:
-                return repo
+        scored.sort(key=lambda x: x["score"], reverse=True)
+        top = scored[0] if scored else None
 
-        # 2. Token overlap check
-        words = set(clean_text.split())
-        best_match = None
-        best_overlap = 0
+        if top and top["score"] >= min_threshold:
+            return {
+                "found": True,
+                "query": query,
+                "clean_query": clean_q,
+                "matched_repo": top["repo"],
+                "short_name": top["short_name"],
+                "confidence": top["score"],
+                "is_exact": top["score"] >= 0.95,
+                "matches": scored[:5],
+            }
 
-        for repo in user_repos:
-            repo_tokens = set(repo.lower().replace("-", " ").replace("_", " ").replace("/", " ").split())
-            overlap = len(words.intersection(repo_tokens))
-            if overlap > best_overlap:
-                best_overlap = overlap
-                best_match = repo
+        return {
+            "found": False,
+            "query": query,
+            "clean_query": clean_q,
+            "matched_repo": None,
+            "confidence": top["score"] if top else 0.0,
+            "matches": scored[:5],
+        }
 
-        if best_overlap > 0:
-            return best_match
-
-        # Default fallback to first available repo
-        return user_repos[0]
+    def match_repository(self, speech_text: str, user_repos: List[str]) -> Optional[str]:
+        """Backward-compatible helper: returns the best matching repository string or None."""
+        res = self.search_repositories(speech_text, user_repos, min_threshold=0.35)
+        if res.get("found"):
+            return res.get("matched_repo")
+        return None
 
 
 sarvam_voice_service = SarvamVoiceService()

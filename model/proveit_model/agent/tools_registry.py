@@ -292,6 +292,82 @@ def get_agent_tools_definitions() -> List[ToolDefinition]:
                 "required": ["target_service", "error_log"]
             }
         ),
+        ToolDefinition(
+            name="search_user_repositories",
+            description="Fuzzy searches caller's connected GitHub repositories using spoken phrases from a phone call (e.g. 'deploy friday', 'fraud detection demo', 'draw space'). Returns best matching repository, confidence score, detected framework, and recommended cloud platform (Vercel, Render, Railway, Netlify, AWS).",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "What the user said on the call, e.g. 'friday', 'fraud demo', 'clothing app'"
+                    }
+                },
+                "required": ["query"]
+            }
+        ),
+        ToolDefinition(
+            name="list_user_repositories",
+            description="Lists all GitHub repositories connected to the authenticated user's account with framework and deployment recommendations.",
+            parameters={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        ToolDefinition(
+            name="deploy_to_cloud",
+            description="Autonomous multi-cloud deployment tool. Deploys repository to the chosen cloud provider ('vercel', 'render', 'railway', 'netlify', or 'aws'). Automatically configures edge CDN, Dockerfiles, and domain aliases.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "repo_name": {
+                        "type": "string",
+                        "description": "GitHub repository name e.g. 'AbhinayAmbati/fridayy' or 'owner/repo'"
+                    },
+                    "provider": {
+                        "type": "string",
+                        "description": "Target cloud provider: 'vercel' (Next.js/React/frontend), 'render' (Python/FastAPI/backend), 'railway' (full-stack), 'netlify' (static/jamstack), or 'aws' (EC2/Docker)",
+                        "default": "vercel"
+                    },
+                    "root_directory": {
+                        "type": "string",
+                        "description": "Optional monorepo subfolder, e.g. 'app', 'frontend', 'server'"
+                    },
+                    "branch": {
+                        "type": "string",
+                        "description": "Git branch to deploy, defaults to 'main'"
+                    },
+                    "environment": {
+                        "type": "string",
+                        "description": "Target environment: 'production' or 'preview'",
+                        "default": "production"
+                    }
+                },
+                "required": ["repo_name", "provider"]
+            }
+        ),
+        ToolDefinition(
+            name="get_deployment_status",
+            description="Checks real-time build and deployment status of an in-flight cloud deployment on Vercel, Render, Railway, Netlify, or AWS.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "provider": {
+                        "type": "string",
+                        "description": "Cloud provider: 'vercel', 'render', 'railway', 'netlify', 'aws'"
+                    },
+                    "deployment_id": {
+                        "type": "string",
+                        "description": "Deployment identifier returned by deploy tool"
+                    },
+                    "repo_name": {
+                        "type": "string",
+                        "description": "Repository name"
+                    }
+                },
+                "required": ["provider", "deployment_id"]
+            }
+        ),
     ]
 
 
@@ -457,7 +533,9 @@ class ToolExecutor:
                 from backend.app.providers.registry import cloud_registry
                 repo_url = arguments.get("repo_url") or context.get("target_repo", "")
                 branch = arguments.get("branch", "main")
-                res = await cloud_registry.get_provider("vercel").deploy_repository(repo_url, branch=branch)
+                root_dir = arguments.get("root_directory") or context.get("root_directory")
+                env = arguments.get("environment") or context.get("environment", "production")
+                res = await cloud_registry.get_provider("vercel").deploy_repository(repo_url, branch=branch, root_directory=root_dir, environment=env)
                 context["app_url"] = res.live_url
                 return res.model_dump()
 
@@ -465,7 +543,9 @@ class ToolExecutor:
                 from backend.app.providers.registry import cloud_registry
                 repo_url = arguments.get("repo_url") or context.get("target_repo", "")
                 branch = arguments.get("branch", "main")
-                res = await cloud_registry.get_provider("render").deploy_repository(repo_url, branch=branch)
+                root_dir = arguments.get("root_directory") or context.get("root_directory")
+                env = arguments.get("environment") or context.get("environment", "production")
+                res = await cloud_registry.get_provider("render").deploy_repository(repo_url, branch=branch, root_directory=root_dir, environment=env)
                 context["app_url"] = res.live_url
                 return res.model_dump()
 
@@ -473,7 +553,9 @@ class ToolExecutor:
                 from backend.app.providers.registry import cloud_registry
                 repo_url = arguments.get("repo_url") or context.get("target_repo", "")
                 branch = arguments.get("branch", "main")
-                res = await cloud_registry.get_provider("railway").deploy_repository(repo_url, branch=branch)
+                root_dir = arguments.get("root_directory") or context.get("root_directory")
+                env = arguments.get("environment") or context.get("environment", "production")
+                res = await cloud_registry.get_provider("railway").deploy_repository(repo_url, branch=branch, root_directory=root_dir, environment=env)
                 context["app_url"] = res.live_url
                 return res.model_dump()
 
@@ -481,8 +563,98 @@ class ToolExecutor:
                 from backend.app.providers.registry import cloud_registry
                 repo_url = arguments.get("repo_url") or context.get("target_repo", "")
                 branch = arguments.get("branch", "main")
-                res = await cloud_registry.get_provider("netlify").deploy_repository(repo_url, branch=branch)
+                root_dir = arguments.get("root_directory") or context.get("root_directory")
+                env = arguments.get("environment") or context.get("environment", "production")
+                res = await cloud_registry.get_provider("netlify").deploy_repository(repo_url, branch=branch, root_directory=root_dir, environment=env)
                 context["app_url"] = res.live_url
+                return res.model_dump()
+
+            elif tool_name == "search_user_repositories":
+                from backend.app.services.sarvam_voice import sarvam_voice_service
+                from backend.app.providers.registry import cloud_registry
+                from backend.app.db import engine
+                from backend.app.entities.models import RepoConfig
+                from sqlmodel import Session, select
+
+                query = arguments.get("query") or arguments.get("repo_name", "")
+                user_repos = []
+                with Session(engine) as sess:
+                    configs = sess.exec(select(RepoConfig)).all()
+                    user_repos = [c.repo_id for c in configs]
+                if not user_repos:
+                    user_repos = ["pallets/flask", "fastapi/fastapi", "vercel/next.js"]
+
+                search_res = sarvam_voice_service.search_repositories(query, user_repos)
+                matched = search_res.get("matched_repo")
+                rec = cloud_registry.recommend_provider(matched or query) if matched else {}
+                search_res["recommendation"] = rec
+                search_res["recommended_provider"] = rec.get("recommended_provider", "vercel")
+                return search_res
+
+            elif tool_name == "list_user_repositories":
+                from backend.app.db import engine
+                from backend.app.entities.models import RepoConfig
+                from backend.app.providers.registry import cloud_registry
+                from sqlmodel import Session, select
+
+                with Session(engine) as sess:
+                    configs = sess.exec(select(RepoConfig)).all()
+                    repos_list = [
+                        {
+                            "repo_id": c.repo_id,
+                            "short_name": c.repo_id.split("/")[-1],
+                            "language": c.language,
+                            "recommended_provider": cloud_registry.recommend_provider(c.repo_id, c.language).get("recommended_provider"),
+                        }
+                        for c in configs
+                    ]
+                return {"count": len(repos_list), "repositories": repos_list}
+
+            elif tool_name == "deploy_to_cloud":
+                from backend.app.providers.registry import cloud_registry
+                repo_name = arguments.get("repo_name") or context.get("target_repo", "")
+                provider_name = (arguments.get("provider") or "vercel").lower().strip()
+                branch = arguments.get("branch", "main")
+                root_dir = arguments.get("root_directory") or context.get("root_directory")
+                env = arguments.get("environment") or context.get("environment", "production")
+
+                if provider_name == "aws":
+                    inst_id = context.get("ec2_id", "i-0a8f9c12345678")
+                    pub_ip = context.get("ec2_ip", "54.158.24.184")
+                    port = int(context.get("port", 3000))
+                    return self.aws.deploy_to_ec2(
+                        instance_id=inst_id,
+                        public_ip=pub_ip,
+                        repo_name=repo_name,
+                        env_vars=context.get("injected_env", {}),
+                        port=port,
+                        branch=branch,
+                        github_token=getattr(self.github, "token", "") or os.getenv("GITHUB_TOKEN", ""),
+                    )
+                else:
+                    prov = cloud_registry.get_provider(provider_name)
+                    if not prov:
+                        return {"status": "ERROR", "error": f"Unsupported provider: '{provider_name}'"}
+                    res = await prov.deploy_repository(
+                        repo_name=repo_name,
+                        branch=branch,
+                        root_directory=root_dir,
+                        environment=env,
+                        github_token=getattr(self.github, "token", "") or os.getenv("GITHUB_TOKEN", ""),
+                    )
+                    context["app_url"] = res.live_url
+                    return res.model_dump()
+
+            elif tool_name == "get_deployment_status":
+                from backend.app.providers.registry import cloud_registry
+                provider_name = (arguments.get("provider") or "vercel").lower().strip()
+                deployment_id = arguments.get("deployment_id", "")
+                repo_name = arguments.get("repo_name")
+
+                prov = cloud_registry.get_provider(provider_name)
+                if not prov:
+                    return {"status": "ERROR", "error": f"Provider '{provider_name}' not found."}
+                res = await prov.get_deployment_status(deployment_id=deployment_id, repo_name=repo_name)
                 return res.model_dump()
 
             elif tool_name == "autonomous_sre_heal":
