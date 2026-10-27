@@ -229,7 +229,14 @@ function MainApp() {
   };
 
   /* ─────────── REAL LIVE AGENT SSE STREAMING & DEVOPS DIAGNOSTIC CHAT ─────────── */
-  const send = useCallback(async (text?: string, targetRepoParam?: string, targetEc2Param?: string, envParam?: EnvTarget, providerParam?: string) => {
+  const send = useCallback(async (
+    text?: string,
+    targetRepoParam?: string,
+    targetEc2Param?: string,
+    envParam?: EnvTarget,
+    providerParam?: string,
+    rootDirParam?: string
+  ) => {
     const chosenRepo = targetRepoParam || selectedRepo || repos[0]?.name || "";
     const chosenEc2 = targetEc2Param || selectedInstance || instances[0]?.instance_id || "EC2-Target";
     const chosenEnv = envParam || target || "production";
@@ -392,7 +399,7 @@ function MainApp() {
             checkout_code: { ...prev.nodes.checkout_code, status: "success", verdict: "ACCEPTED", duration: "0.5s", detail: `Repository checked out. Inspected build targets for ${providerParam.toUpperCase()}.` },
             initialization: { ...prev.nodes.initialization, status: "running", verdict: "RUNNING", detail: `Configuring ${providerParam.toUpperCase()} build matrix and environment (injected ${Object.keys(dynamicEnvVars).length} env vars)...` }
           },
-          logs: [...prev.logs, { id: `log-${Date.now()}-2`, time: new Date().toLocaleTimeString(), text: `[INFO] Verified framework manifest (${frameworkToUse}) and build settings. Injected ${Object.keys(dynamicEnvVars).length} environment variables.`, type: "info" }]
+          logs: [...prev.logs, { id: `log-${Date.now()}-2`, time: new Date().toLocaleTimeString(), text: `[INFO] Verified build settings (Folder: ${rootDirParam || "Root (/)"}, Framework: ${frameworkToUse}). Injected ${Object.keys(dynamicEnvVars).length} environment variables.`, type: "info" }]
         }));
 
         // Call backend /api/multicloud/deploy
@@ -406,6 +413,7 @@ function MainApp() {
             branch: branchToUse,
             environment: chosenEnv,
             framework: frameworkToUse,
+            root_directory: rootDirParam || undefined,
             env_vars: dynamicEnvVars,
             github_token: storedPat || undefined,
           }),
@@ -776,18 +784,19 @@ function MainApp() {
     setDeployModalOpen(true);
   };
 
-  const handleLaunchFromModal = (repoName: string, instanceId: string, envVal: EnvTarget, providerVal?: string) => {
+  const handleLaunchFromModal = (repoName: string, instanceId: string, envVal: EnvTarget, providerVal?: string, rootDir?: string) => {
     setSelectedRepo(repoName);
     setSelectedInstance(instanceId);
     setTarget(envVal);
     setView("pipeline");
     setTimeout(() => {
       send(
-        `Deploy ${repoName} to ${providerVal ? providerVal.toUpperCase() : "EC2 " + instanceId}`,
+        `Deploy ${repoName}${rootDir ? ` (${rootDir})` : ""} to ${providerVal ? providerVal.toUpperCase() : "EC2 " + instanceId}`,
         repoName,
         instanceId,
         envVal,
-        providerVal
+        providerVal,
+        rootDir
       );
     }, 150);
   };

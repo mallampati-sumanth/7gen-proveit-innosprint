@@ -50,6 +50,7 @@ class BaseCloudProvider(ABC):
         service_type: Optional[str] = None,
         github_token: Optional[str] = None,
         environment: str = "production",
+        root_directory: Optional[str] = None,
         **kwargs: Any,
     ) -> DeploymentResult:
         """Triggers deployment and returns DeploymentResult with live URL or status."""

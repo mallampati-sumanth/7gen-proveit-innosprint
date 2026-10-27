@@ -37,8 +37,12 @@ class VercelProvider(BaseCloudProvider):
         service_type: Optional[str] = None,
         github_token: Optional[str] = None,
         environment: str = "production",
+        root_directory: Optional[str] = None,
         **kwargs: Any,
     ) -> DeploymentResult:
+        clean_root = (root_directory or kwargs.get("root_directory") or "").strip("/").strip()
+        if clean_root == ".":
+            clean_root = ""
         clean_repo = re.sub(r"[^a-zA-Z0-9\-]", "-", repo_name.split("/")[-1]).lower()[:100].strip("-")
         rand_hash = hashlib.md5(f"{repo_name}{time.time()}".encode()).hexdigest()[:8]
         deployment_id = f"dpl_{rand_hash}"
@@ -134,29 +138,47 @@ class VercelProvider(BaseCloudProvider):
                     # 3. Dynamic framework auto-detection by inspecting repository package.json
                     detected_fw = None
                     try:
-                        pkg_res = await client.get(f"https://api.github.com/repos/{full_repo}/contents/package.json", headers=gh_headers)
-                        if pkg_res.status_code == 200:
-                            raw_content = base64.b64decode(pkg_res.json().get("content", "")).decode("utf-8", errors="ignore")
-                            pkg_json = json.loads(raw_content)
-                            all_deps = {**pkg_json.get("dependencies", {}), **pkg_json.get("devDependencies", {})}
-                            if "next" in all_deps:
-                                detected_fw = "nextjs"
-                            elif "vite" in all_deps or "@vitejs/plugin-react" in all_deps or "@tailwindcss/vite" in all_deps:
-                                detected_fw = "vite"
-                            elif "astro" in all_deps:
-                                detected_fw = "astro"
-                            elif "@sveltejs/kit" in all_deps or "svelte" in all_deps:
-                                detected_fw = "sveltekit"
-                            elif "nuxt" in all_deps or "nuxt3" in all_deps:
-                                detected_fw = "nuxtjs"
-                            elif "remix" in all_deps or "@remix-run/react" in all_deps:
-                                detected_fw = "remix"
-                            elif "gatsby" in all_deps:
-                                detected_fw = "gatsby"
-                            elif "react-scripts" in all_deps:
-                                detected_fw = "create-react-app"
-                            elif "vue" in all_deps:
-                                detected_fw = "vue"
+                        candidate_paths = []
+                        if clean_root:
+                            candidate_paths.append(f"{clean_root}/package.json")
+                        else:
+                            candidate_paths.extend([
+                                "package.json",
+                                "frontend/package.json",
+                                "client/package.json",
+                                "web/package.json",
+                                "app/package.json",
+                                "ui/package.json",
+                            ])
+
+                        for pkg_path in candidate_paths:
+                            pkg_res = await client.get(f"https://api.github.com/repos/{full_repo}/contents/{pkg_path}", headers=gh_headers)
+                            if pkg_res.status_code == 200:
+                                raw_content = base64.b64decode(pkg_res.json().get("content", "")).decode("utf-8", errors="ignore")
+                                pkg_json = json.loads(raw_content)
+                                all_deps = {**pkg_json.get("dependencies", {}), **pkg_json.get("devDependencies", {})}
+                                if "next" in all_deps:
+                                    detected_fw = "nextjs"
+                                elif "vite" in all_deps or "@vitejs/plugin-react" in all_deps or "@tailwindcss/vite" in all_deps:
+                                    detected_fw = "vite"
+                                elif "astro" in all_deps:
+                                    detected_fw = "astro"
+                                elif "@sveltejs/kit" in all_deps or "svelte" in all_deps:
+                                    detected_fw = "sveltekit"
+                                elif "nuxt" in all_deps or "nuxt3" in all_deps:
+                                    detected_fw = "nuxtjs"
+                                elif "remix" in all_deps or "@remix-run/react" in all_deps:
+                                    detected_fw = "remix"
+                                elif "gatsby" in all_deps:
+                                    detected_fw = "gatsby"
+                                elif "react-scripts" in all_deps:
+                                    detected_fw = "create-react-app"
+                                elif "vue" in all_deps:
+                                    detected_fw = "vue"
+
+                                if not clean_root and "/" in pkg_path:
+                                    clean_root = pkg_path.rsplit("/", 1)[0]
+                                break
                     except Exception:
                         pass
 
@@ -164,13 +186,18 @@ class VercelProvider(BaseCloudProvider):
                     if not fw_to_use and service_type and service_type.lower() not in ["next.js 14", "next.js", "auto", "standard", "standard application", "other", ""]:
                         fw_to_use = fw_val
 
-                    # Patch Vercel project's framework if project exists to prevent stale legacy framework mismatch
+                    # Patch Vercel project's framework and rootDirectory if project exists
+                    project_patch = {}
                     if fw_to_use:
+                        project_patch["framework"] = fw_to_use
+                    if clean_root is not None:
+                        project_patch["rootDirectory"] = clean_root or None
+                    if project_patch:
                         try:
                             patch_url = f"https://api.vercel.com/v9/projects/{clean_repo}"
                             if team_id:
                                 patch_url += f"?teamId={team_id}"
-                            await client.patch(patch_url, json={"framework": fw_to_use}, headers=headers)
+                            await client.patch(patch_url, json=project_patch, headers=headers)
                         except Exception:
                             pass
 
@@ -190,8 +217,13 @@ class VercelProvider(BaseCloudProvider):
                         "target": target_mode,
                     }
 
+                    project_settings: Dict[str, Any] = {}
                     if fw_to_use:
-                        payload["projectSettings"] = {"framework": fw_to_use}
+                        project_settings["framework"] = fw_to_use
+                    if clean_root:
+                        project_settings["rootDirectory"] = clean_root
+                    if project_settings:
+                        payload["projectSettings"] = project_settings
 
                     if env_vars:
                         payload["env"] = {
@@ -285,6 +317,7 @@ class VercelProvider(BaseCloudProvider):
                                 f"[Vercel v13] Authenticated as @{username} on team '{team_id or 'personal'}'",
                                 f"[Vercel GitSource] Connected to GitHub repo '{full_repo}' (ID: {repo_id}, branch: '{branch}')",
                                 f"[Vercel Framework] Verified framework: {fw_to_use or 'Auto-Detected'}",
+                                f"[Vercel Root Directory] Subfolder: '{clean_root or 'Root (/)'}'",
                                 f"[Vercel Environment] Target: {target_mode} (Injected {len(env_vars or {})} runtime variables)",
                                 f"[Vercel Deployment ID] {dpl_id}",
                                 f"[Vercel State] Deployment verified: {ready_state}",

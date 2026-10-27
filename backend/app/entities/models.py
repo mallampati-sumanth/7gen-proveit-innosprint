@@ -88,6 +88,7 @@ class RepoConfig(SQLModel, table=True):
     default_branch: str = Field(default="main")
     language: str = Field(default="TypeScript")
     framework: Optional[str] = Field(default=None)
+    root_directory: Optional[str] = Field(default=None)
     default_port: int = Field(default=3000)
     healthcheck_path: str = Field(default="/health")
     is_connected: bool = Field(default=True)

@@ -73,13 +73,18 @@ export const DeploymentWizardModal = ({
   selectedInstance: string;
   onRepoChange?: (repo: string) => void;
   onInstanceChange?: (inst: string) => void;
-  onLaunch: (repo: string, instance: string, env: EnvTarget, provider?: string) => void;
+  onLaunch: (repo: string, instance: string, env: EnvTarget, provider?: string, rootDir?: string) => void;
 }) => {
   const [activeTab, setActiveTab] = useState<"deploy" | "sre">("deploy");
   const [repo, setRepo] = useState(selectedRepo || repos[0]?.name || "");
   const [provider, setProvider] = useState<"vercel" | "render" | "railway" | "netlify" | "aws">("render");
   const [inst, setInst] = useState(selectedInstance || instances[0]?.instance_id || "NEW_INSTANCE");
   const [env, setEnv] = useState<EnvTarget>("production");
+
+  // Monorepo Subfolder Selection State
+  const [subfolder, setSubfolder] = useState<string>("");
+  const [availableDirs, setAvailableDirs] = useState<string[]>([]);
+  const [loadingDirs, setLoadingDirs] = useState<boolean>(false);
 
   // AI Recommendation State
   const [recommendation, setRecommendation] = useState<{
@@ -97,9 +102,12 @@ export const DeploymentWizardModal = ({
   const [sreLoading, setSreLoading] = useState(false);
   const [sreResult, setSreResult] = useState<any>(null);
 
-  // Fetch AI recommendation when repo changes
+  // Fetch AI recommendation & monorepo subfolders when repo changes
   useEffect(() => {
-    if (!repo) return;
+    if (!repo) {
+      setAvailableDirs([]);
+      return;
+    }
     const fetchRec = async () => {
       try {
         const res = await fetch(`${API_BASE}/api/multicloud/recommendation?repo_name=${encodeURIComponent(repo)}`);
@@ -112,7 +120,30 @@ export const DeploymentWizardModal = ({
         }
       } catch {}
     };
+
+    const fetchDirs = async () => {
+      setLoadingDirs(true);
+      try {
+        const storedPat = (typeof window !== "undefined" ? localStorage.getItem("proveit_github_pat") : null) || "";
+        const url = `${API_BASE}/api/multicloud/directories?repo_name=${encodeURIComponent(repo)}${storedPat ? `&token=${encodeURIComponent(storedPat)}` : ""}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          const dirs = data.directories || [];
+          setAvailableDirs(dirs);
+          if (data.suggested && data.suggested.length > 0 && !data.has_root_manifest) {
+            setSubfolder(data.suggested[0]);
+          } else {
+            setSubfolder("");
+          }
+        }
+      } catch {} finally {
+        setLoadingDirs(false);
+      }
+    };
+
     fetchRec();
+    fetchDirs();
   }, [repo]);
   useEffect(() => {
     if (open) {
@@ -145,7 +176,7 @@ export const DeploymentWizardModal = ({
 
   // Handle Deployment: immediately close modal and route to Pipeline Tracker with live updates
   const handleMultiCloudDeploy = () => {
-    onLaunch(repo, inst, env, provider);
+    onLaunch(repo, inst, env, provider, subfolder || undefined);
     onClose();
   };
 
@@ -278,6 +309,42 @@ export const DeploymentWizardModal = ({
                       <option key={r.name} value={r.name}>{r.name} ({r.language})</option>
                     ))}
                   </select>
+                )}
+              </div>
+
+              {/* Step 1.5: Monorepo Subfolder / Root Directory Selection */}
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <label style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-2)" }}>
+                    Target Folder / Root Directory
+                  </label>
+                  {loadingDirs && (
+                    <span style={{ fontSize: 11, color: "var(--text-3)", display: "flex", alignItems: "center", gap: 4 }}>
+                      <span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span> Scanning folders...
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <select
+                    value={subfolder}
+                    onChange={e => setSubfolder(e.target.value)}
+                    style={{
+                      flex: 1, padding: "9px 12px", borderRadius: 8,
+                      background: "var(--bg-input)", color: "var(--text-1)", border: "1px solid var(--border)",
+                      fontSize: 12.5, fontFamily: "JetBrains Mono, monospace", outline: "none",
+                    }}
+                  >
+                    <option value="">📁 Root (/) - Entire Repository</option>
+                    {availableDirs.map(d => (
+                      <option key={d} value={d}>📂 /{d} (Subfolder)</option>
+                    ))}
+                  </select>
+                </div>
+                {availableDirs.length > 0 && (
+                  <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
+                    Detected subfolders: {availableDirs.map(d => `/${d}`).join(", ")}. Select a folder if your build manifest is in a subdirectory.
+                  </div>
                 )}
               </div>
 
@@ -540,7 +607,7 @@ export const DeploymentWizardModal = ({
           display: "flex", justifyContent: "space-between", alignItems: "center",
         }}>
           <div style={{ fontSize: 12, color: "var(--text-3)" }}>
-            Target: <strong style={{ color: "var(--text-1)" }}>{provider.toUpperCase()}</strong> ({env})
+            Target: <strong style={{ color: "var(--text-1)" }}>{provider.toUpperCase()}</strong> ({env}){subfolder ? ` • Folder: /${subfolder}` : ""}
           </div>
 
           <div style={{ display: "flex", gap: 10 }}>
@@ -570,7 +637,7 @@ export const DeploymentWizardModal = ({
                 <span>
                   {deploying
                     ? `Deploying to ${PROVIDERS.find(p => p.id === provider)?.name || provider.toUpperCase()}...`
-                    : `Deploy to ${PROVIDERS.find(p => p.id === provider)?.name || provider.toUpperCase()}`}
+                    : `Deploy ${subfolder ? `/${subfolder} ` : ""}to ${PROVIDERS.find(p => p.id === provider)?.name || provider.toUpperCase()}`}
                 </span>
               </button>
             )}

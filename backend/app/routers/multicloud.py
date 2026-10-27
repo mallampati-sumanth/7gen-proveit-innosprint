@@ -4,6 +4,7 @@ import json
 import hashlib
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlmodel import Session, select
@@ -27,6 +28,7 @@ class MultiCloudDeployRequest(BaseModel):
     commit_hash: Optional[str] = None
     target_ec2: Optional[str] = None
     github_token: Optional[str] = None
+    root_directory: Optional[str] = None
 
 
 class SREHealRequest(BaseModel):
@@ -58,6 +60,59 @@ def get_deployment_recommendation(
     """
     rec = cloud_registry.recommend_provider(repo_name, language, framework)
     return rec
+
+
+@router.get("/directories")
+async def list_repo_directories(
+    repo_name: str = Query(...),
+    branch: Optional[str] = Query("main"),
+    token: Optional[str] = Query(None),
+):
+    """
+    Monorepo Analyzer: Inspects repository tree via GitHub API and returns top-level subfolders
+    (e.g., frontend, backend, client, server) to allow users to select single-folder deployment.
+    """
+    clean_repo = repo_name.strip()
+    gh_token = token or getattr(settings, "GITHUB_TOKEN", None) or os.getenv("GITHUB_TOKEN")
+    gh_headers = {"User-Agent": "ProveIt-Subfolder-Scanner"}
+    if gh_token:
+        gh_headers["Authorization"] = f"token {gh_token}"
+
+    dirs = []
+    has_root_manifest = False
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # 1. Resolve full repository owner/name if needed
+            full_repo = clean_repo
+            if "/" not in full_repo:
+                try:
+                    u_res = await client.get("https://api.github.com/user", headers=gh_headers)
+                    if u_res.status_code == 200:
+                        u_name = u_res.json().get("login")
+                        if u_name:
+                            full_repo = f"{u_name}/{clean_repo}"
+                except Exception:
+                    pass
+
+            # 2. Try fetching repository root contents
+            res = await client.get(f"https://api.github.com/repos/{full_repo}/contents", headers=gh_headers)
+            if res.status_code == 200 and isinstance(res.json(), list):
+                for item in res.json():
+                    if item.get("type") == "dir":
+                        d_name = item.get("name", "")
+                        if not d_name.startswith("."):
+                            dirs.append(d_name)
+                    elif item.get("name") in ["package.json", "requirements.txt", "Dockerfile", "go.mod", "pom.xml", "Cargo.toml"]:
+                        has_root_manifest = True
+    except Exception:
+        pass
+
+    return {
+        "repo_name": clean_repo,
+        "directories": dirs,
+        "has_root_manifest": has_root_manifest,
+        "suggested": [d for d in ["frontend", "backend", "client", "server", "web", "api"] if d in dirs],
+    }
 
 
 @router.post("/deploy")
@@ -110,6 +165,7 @@ async def deploy_to_cloud(req: MultiCloudDeployRequest, session: Session = Depen
             service_type=active_framework,
             github_token=active_gh_token,
             environment=target_env,
+            root_directory=req.root_directory or (getattr(repo_cfg, "root_directory", None) if repo_cfg else None),
         )
         live_url = result.live_url or ""
         dpl_id = result.deployment_id

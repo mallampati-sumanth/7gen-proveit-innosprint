@@ -33,6 +33,7 @@ class RenderProvider(BaseCloudProvider):
         commit_hash: Optional[str] = None,
         service_type: Optional[str] = "web_service",
         github_token: Optional[str] = None,
+        root_directory: Optional[str] = None,
         **kwargs: Any,
     ) -> DeploymentResult:
         clean_repo = re.sub(r"[^a-zA-Z0-9\-]", "-", repo_name.split("/")[-1]).lower()[:100].strip("-")
@@ -74,6 +75,8 @@ class RenderProvider(BaseCloudProvider):
                             "envVars": [{"key": k, "value": str(v)} for k, v in (env_vars or {}).items() if k]
                         }
                     }
+                    if root_directory and root_directory.strip("/").strip() and root_directory.strip() != ".":
+                        payload["rootDir"] = root_directory.strip("/").strip()
                     if owner_id:
                         payload["ownerId"] = owner_id
 

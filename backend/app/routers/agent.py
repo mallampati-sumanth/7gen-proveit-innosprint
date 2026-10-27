@@ -91,6 +91,7 @@ class RepoAddRequest(BaseModel):
     description: Optional[str] = None
     lang: Optional[str] = "TypeScript"
     framework: Optional[str] = None
+    root_directory: Optional[str] = None
     port: Optional[int] = 3000
     clone_url: Optional[str] = None
 
@@ -398,7 +399,8 @@ def add_repository(req: RepoAddRequest, session: Session = Depends(get_session))
         owner=owner,
         description=manifest.get("description") or req.description or f"Repository for {repo_clean}",
         language=manifest.get("runtime") or req.lang or "Unknown",
-        framework=manifest.get("framework") or req.framework or "Container",
+        framework=manifest.get("framework") or req.framework or None,
+        root_directory=req.root_directory,
         default_port=manifest.get("port") or req.port or 3000,
         default_branch=manifest.get("branch") or "main",
         clone_url=manifest.get("clone_url") or f"https://github.com/{repo_clean}.git",
@@ -425,6 +427,7 @@ def add_repository(req: RepoAddRequest, session: Session = Depends(get_session))
         "owner": new_repo.owner,
         "lang": new_repo.language,
         "framework": new_repo.framework,
+        "root_directory": new_repo.root_directory,
         "port": new_repo.default_port,
         "default_branch": new_repo.default_branch,
         "description": new_repo.description,
