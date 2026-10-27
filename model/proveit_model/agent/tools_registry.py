@@ -698,9 +698,18 @@ class ToolExecutor:
                     }
 
                 matched = search_res.get("matched_repo")
-                matches = search_res.get("matches", [])
-                candidate_names = [m.get("short_name", m.get("repo_id", m.get("repo", "")).split("/")[-1]) for m in matches if m][:4]
-                search_res["candidate_names"] = candidate_names
+                raw_matches = search_res.get("matches")
+                matches: List[Any] = raw_matches if isinstance(raw_matches, list) else []
+                candidate_names: List[str] = []
+                for m in matches:
+                    if isinstance(m, dict):
+                        name = m.get("short_name") or m.get("repo_id") or m.get("repo")
+                        if name and isinstance(name, str):
+                            candidate_names.append(name.split("/")[-1])
+                    elif isinstance(m, str):
+                        candidate_names.append(m.split("/")[-1])
+
+                search_res["candidate_names"] = candidate_names[:4]
                 search_res["nearest_options"] = matches[:4]
 
                 cloud_reg = _get_cloud_registry()
