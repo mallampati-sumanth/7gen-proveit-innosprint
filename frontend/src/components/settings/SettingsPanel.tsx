@@ -68,13 +68,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme })
       const ok = await updateProfile({
         name: profileName,
         phone_number: profilePhone,
+        voice_pin: voicePin,
       });
       if (ok) {
         setUserVoicePhone(profilePhone);
-        setProfileMsg({ type: "success", text: "Profile and Mobile Number updated successfully!" });
+        setProfileMsg({ type: "success", text: "Profile, Mobile Number, and Voice PIN updated successfully!" });
         setTimeout(() => setProfileMsg(null), 4000);
       } else {
-        setProfileMsg({ type: "error", text: "Failed to update profile. Please verify number format." });
+        setProfileMsg({ type: "error", text: "Failed to update profile. Please verify format." });
       }
     } catch (err: any) {
       setProfileMsg({ type: "error", text: err.message || "Could not update profile." });
@@ -107,6 +108,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme })
   const [maxManagedInstances, setMaxManagedInstances] = useState(2);
   const [healthProbePath, setHealthProbePath] = useState("/health");
   const [healthProbeTimeout, setHealthProbeTimeout] = useState(5000);
+
+  // 3b. Multi-Cloud Target API Keys
+  const [vercelToken, setVercelToken] = useState("");
+  const [renderApiKey, setRenderApiKey] = useState("");
+  const [railwayToken, setRailwayToken] = useState("");
+  const [multicloudSandbox, setMulticloudSandbox] = useState(true);
+  const [vercelConfigured, setVercelConfigured] = useState(false);
+  const [renderConfigured, setRenderConfigured] = useState(false);
+  const [railwayConfigured, setRailwayConfigured] = useState(false);
 
   // 4. VoiceOps & Telephony
   const [telephonyPhone, setTelephonyPhone] = useState("+91 80 4736 1820");
@@ -146,6 +156,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme })
           if (data.sarvam_language) setSarvamLanguage(data.sarvam_language);
           if (data.telephony_agent_phone) setTelephonyPhone(data.telephony_agent_phone);
           if (typeof data.sarvam_configured === "boolean") setSarvamConfigured(data.sarvam_configured);
+          if (typeof data.vercel_configured === "boolean") setVercelConfigured(data.vercel_configured);
+          if (typeof data.render_configured === "boolean") setRenderConfigured(data.render_configured);
+          if (typeof data.railway_configured === "boolean") setRailwayConfigured(data.railway_configured);
+          if (typeof data.multicloud_sandbox_enabled === "boolean") setMulticloudSandbox(data.multicloud_sandbox_enabled);
         }
       } catch (err) {
         console.warn("Could not fetch remote settings, using local defaults:", err);
@@ -212,6 +226,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme })
           webhook_url: webhookUrl,
           audit_auto_export: auditAutoExport,
           require_approval_for_destructive: requireApprovalForDestructive,
+          vercel_token: vercelToken.trim() || undefined,
+          render_api_key: renderApiKey.trim() || undefined,
+          railway_token: railwayToken.trim() || undefined,
+          multicloud_sandbox_enabled: multicloudSandbox,
         }),
       });
 
@@ -565,8 +583,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme })
                   </span>
                 </div>
 
-                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                  <div style={{ flex: 1, minWidth: 240 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 140px auto", gap: 12, alignItems: "flex-end" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--text-2)", marginBottom: 6 }}>
+                      Mobile Number (Caller ID)
+                    </label>
                     <input
                       type="tel"
                       value={profilePhone}
@@ -588,11 +609,40 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme })
                     />
                   </div>
 
+                  <div>
+                    <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--text-2)", marginBottom: 6 }}>
+                      4-Digit PIN
+                    </label>
+                    <input
+                      type="password"
+                      maxLength={4}
+                      value={voicePin}
+                      onChange={(e) => setVoicePin(e.target.value.replace(/\D/g, ""))}
+                      placeholder="1234"
+                      style={{
+                        width: "100%",
+                        padding: "10px 14px",
+                        borderRadius: 8,
+                        background: "var(--bg-input)",
+                        border: "1px solid var(--border)",
+                        color: "var(--text-1)",
+                        fontSize: 16,
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontWeight: 700,
+                        letterSpacing: ".2em",
+                        textAlign: "center",
+                        outline: "none",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </div>
+
                   <button
                     onClick={handleSaveProfile}
                     disabled={savingProfile}
                     style={{
-                      padding: "10px 22px",
+                      height: 42,
+                      padding: "0 22px",
                       borderRadius: 8,
                       border: "none",
                       background: "var(--orange)",
@@ -604,10 +654,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme })
                       alignItems: "center",
                       gap: 7,
                       boxShadow: "0 2px 8px rgba(249, 115, 22, 0.25)",
+                      whiteSpace: "nowrap",
                     }}
                   >
                     {savingProfile ? <RefreshCw size={13} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                    <span>{savingProfile ? "Saving..." : "Save Mobile Number"}</span>
+                    <span>{savingProfile ? "Saving..." : "Save Credentials"}</span>
                   </button>
                 </div>
 
@@ -1255,6 +1306,205 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme })
                       boxSizing: "border-box",
                     }}
                   />
+                </div>
+              </div>
+            </div>
+
+            {/* Multi-Cloud Edge & Serverless Providers */}
+            <div style={{
+              padding: "20px 24px",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border)",
+              borderRadius: 14,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-1)", marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
+                    <span>Multi-Cloud Target Integrations & Edge Providers</span>
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: "2px 8px",
+                      borderRadius: 99,
+                      background: "rgba(22, 163, 74, 0.1)",
+                      color: "#16a34a",
+                      border: "1px solid rgba(22, 163, 74, 0.25)",
+                    }}>
+                      MCP CONNECTED
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text-3)", maxWidth: 640 }}>
+                    Deploy frontend apps to Vercel, Python/Node backends to Render, or containers to Railway. When API keys are not supplied, ProveIt automatically routes deployments through high-fidelity managed sandboxes with real HTTPS domains.
+                  </div>
+                </div>
+
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12, fontWeight: 600, color: "var(--text-2)" }}>
+                  <input
+                    type="checkbox"
+                    checked={multicloudSandbox}
+                    onChange={(e) => setMulticloudSandbox(e.target.checked)}
+                    style={{ width: 16, height: 16, accentColor: "#16a34a" }}
+                  />
+                  <span>Enable Zero-Config Managed Sandbox Fallback</span>
+                </label>
+              </div>
+
+              {/* Provider Config Inputs */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {/* Vercel */}
+                <div style={{
+                  padding: "14px 16px",
+                  borderRadius: 10,
+                  background: "var(--bg-card2)",
+                  border: "1px solid var(--border)",
+                  display: "grid",
+                  gridTemplateColumns: "180px 1fr 140px",
+                  alignItems: "center",
+                  gap: 14,
+                }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)", display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>▲ Vercel</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-3)" }}>
+                      Next.js & Frontend Apps
+                    </div>
+                  </div>
+                  <input
+                    type="password"
+                    placeholder="Enter Vercel Token (or leave empty for managed sandbox)"
+                    value={vercelToken}
+                    onChange={(e) => setVercelToken(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      borderRadius: 7,
+                      background: "var(--bg-input)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text-1)",
+                      fontSize: 12,
+                      fontFamily: "JetBrains Mono, monospace",
+                      outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                  <div style={{ textAlign: "right" }}>
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: "3px 8px",
+                      borderRadius: 99,
+                      background: vercelConfigured || vercelToken ? "rgba(22, 163, 74, 0.12)" : "rgba(100, 116, 139, 0.12)",
+                      color: vercelConfigured || vercelToken ? "#16a34a" : "var(--text-3)",
+                      border: `1px solid ${vercelConfigured || vercelToken ? "rgba(22, 163, 74, 0.3)" : "var(--border)"}`,
+                    }}>
+                      {vercelConfigured || vercelToken ? "LIVE API KEY" : "MANAGED SANDBOX"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Render */}
+                <div style={{
+                  padding: "14px 16px",
+                  borderRadius: 10,
+                  background: "var(--bg-card2)",
+                  border: "1px solid var(--border)",
+                  display: "grid",
+                  gridTemplateColumns: "180px 1fr 140px",
+                  alignItems: "center",
+                  gap: 14,
+                }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)", display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>⬡ Render</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-3)" }}>
+                      FastAPI & Web Services
+                    </div>
+                  </div>
+                  <input
+                    type="password"
+                    placeholder="Enter Render API Key (rnd_...)"
+                    value={renderApiKey}
+                    onChange={(e) => setRenderApiKey(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      borderRadius: 7,
+                      background: "var(--bg-input)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text-1)",
+                      fontSize: 12,
+                      fontFamily: "JetBrains Mono, monospace",
+                      outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                  <div style={{ textAlign: "right" }}>
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: "3px 8px",
+                      borderRadius: 99,
+                      background: renderConfigured || renderApiKey ? "rgba(22, 163, 74, 0.12)" : "rgba(100, 116, 139, 0.12)",
+                      color: renderConfigured || renderApiKey ? "#16a34a" : "var(--text-3)",
+                      border: `1px solid ${renderConfigured || renderApiKey ? "rgba(22, 163, 74, 0.3)" : "var(--border)"}`,
+                    }}>
+                      {renderConfigured || renderApiKey ? "LIVE API KEY" : "MANAGED SANDBOX"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Railway */}
+                <div style={{
+                  padding: "14px 16px",
+                  borderRadius: 10,
+                  background: "var(--bg-card2)",
+                  border: "1px solid var(--border)",
+                  display: "grid",
+                  gridTemplateColumns: "180px 1fr 140px",
+                  alignItems: "center",
+                  gap: 14,
+                }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)", display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>🚂 Railway</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-3)" }}>
+                      Docker & Polyglot Backends
+                    </div>
+                  </div>
+                  <input
+                    type="password"
+                    placeholder="Enter Railway Project Token (rw_...)"
+                    value={railwayToken}
+                    onChange={(e) => setRailwayToken(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      borderRadius: 7,
+                      background: "var(--bg-input)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text-1)",
+                      fontSize: 12,
+                      fontFamily: "JetBrains Mono, monospace",
+                      outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                  <div style={{ textAlign: "right" }}>
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: "3px 8px",
+                      borderRadius: 99,
+                      background: railwayConfigured || railwayToken ? "rgba(22, 163, 74, 0.12)" : "rgba(100, 116, 139, 0.12)",
+                      color: railwayConfigured || railwayToken ? "#16a34a" : "var(--text-3)",
+                      border: `1px solid ${railwayConfigured || railwayToken ? "rgba(22, 163, 74, 0.3)" : "var(--border)"}`,
+                    }}>
+                      {railwayConfigured || railwayToken ? "LIVE API KEY" : "MANAGED SANDBOX"}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
