@@ -486,11 +486,18 @@ def generate_recommended_repo_env(repo_id: str):
 
 
 # ─────────── EC2 INSTANCES FLEET MANAGEMENT ───────────
+LAST_EC2_DESCRIBE_TIME: float = 0.0
+EC2_CACHE_TTL: float = 12.0
+
+
 @router.get("/ec2/instances")
 def list_ec2_instances(sync: bool = False, session: Session = Depends(get_session)):
     """List all configured and discovered EC2 instances, synchronizing live status from AWS."""
+    global LAST_EC2_DESCRIBE_TIME
     has_aws_creds = bool(settings.AWS_ACCESS_KEY_ID and not settings.AWS_ACCESS_KEY_ID.startswith("your_"))
-    if has_aws_creds:
+    now = time.time()
+    if has_aws_creds and (sync or (now - LAST_EC2_DESCRIBE_TIME > EC2_CACHE_TTL)):
+        LAST_EC2_DESCRIBE_TIME = now
         try:
             import boto3
             from botocore.config import Config

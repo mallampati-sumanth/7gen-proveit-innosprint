@@ -504,7 +504,8 @@ docker run -d --restart unless-stopped --name proveit-live-app -p {app_port}:80 
         env_keys_injected = list(env_vars.keys())
         deployment_hash = hashlib.sha256(f"{instance_id}:{repo_name}:{commit_sha}:{port}:{time.time()}".encode()).hexdigest()[:16]
 
-        repo_clean = repo_name.split("/")[-1]
+        repo_clean = re.sub(r"[^a-zA-Z0-9_\-]", "_", repo_name.split("/")[-1])
+        container_safe = re.sub(r"[^a-zA-Z0-9_\-]", "_", container_name)
         keys_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../backend/keys/proveit_deploy_key.pem"))
         clean_ip = (public_ip or "").strip()
         remote_output = "Deployment registered."
@@ -512,29 +513,48 @@ docker run -d --restart unless-stopped --name proveit-live-app -p {app_port}:80 
         if clean_ip and re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", clean_ip) and os.path.exists(keys_path):
             try:
                 import subprocess
-                env_lines = "\n".join([f"{k}={v}" for k, v in env_vars.items() if k])
-                if "PORT" not in env_vars:
-                    env_lines += f"\nPORT={port}"
-                if "APP_DEPLOYMENT_KEY" not in env_vars:
-                    env_lines += "\nAPP_DEPLOYMENT_KEY=proveit-live-key-2026"
-                if "HACKATHON_STATE" not in env_vars:
-                    env_lines += "\nHACKATHON_STATE=RUNNING"
+                import shlex
+                gh_token = os.getenv("GITHUB_TOKEN", "").strip()
+                if gh_token and not gh_token.startswith("your_"):
+                    clone_url = f"https://x-access-token:{gh_token}@github.com/{repo_name}.git"
+                else:
+                    clone_url = f"https://github.com/{repo_name}.git"
 
+                # Filter and escape env lines
+                env_safe_lines = []
+                for k, v in env_vars.items():
+                    if k and re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", str(k)):
+                        val_str = str(v).replace("\n", "\\n").replace("'", "'\\''")
+                        env_safe_lines.append(f"{k}='{val_str}'")
+
+                if "PORT" not in env_vars:
+                    env_safe_lines.append(f"PORT='{port}'")
+                if "APP_DEPLOYMENT_KEY" not in env_vars:
+                    env_safe_lines.append("APP_DEPLOYMENT_KEY='proveit-live-key-2026'")
+                if "HACKATHON_STATE" not in env_vars:
+                    env_safe_lines.append("HACKATHON_STATE='RUNNING'")
+
+                env_payload = "\n".join(env_safe_lines)
                 internal_port = int(env_vars.get("PORT")) if str(env_vars.get("PORT", "")).isdigit() else port
+
+                q_repo = shlex.quote(repo_clean)
+                q_clone = shlex.quote(clone_url)
+                q_container = shlex.quote(container_safe)
+
                 remote_script = (
                     f"mkdir -p /home/ubuntu/apps && cd /home/ubuntu/apps && "
-                    f"if [ -d '{repo_clean}/.git' ]; then cd {repo_clean} && git pull origin main || true; else git clone https://github.com/{repo_name}.git {repo_clean} || true; cd {repo_clean}; fi && "
-                    f"cat << 'ENVEOF' > /home/ubuntu/apps/{repo_clean}/.env\n{env_lines}\nENVEOF\n"
+                    f"if [ -d '{q_repo}/.git' ]; then cd {q_repo} && git pull origin main || true; else git clone {q_clone} {q_repo} || true; cd {q_repo}; fi && "
+                    f"cat << 'ENVEOF' > /home/ubuntu/apps/{q_repo}/.env\n{env_payload}\nENVEOF\n"
                     f"docker stop $(docker ps -q --filter publish={port}) 2>/dev/null || true; "
-                    f"docker rm -f {container_name} 2>/dev/null || true; "
+                    f"docker rm -f {q_container} 2>/dev/null || true; "
                     f"if [ -f 'Dockerfile' ]; then "
-                    f"  docker build -t {container_name} . && docker run -d --restart unless-stopped --name {container_name} -p {port}:{internal_port} --env-file /home/ubuntu/apps/{repo_clean}/.env {container_name}; "
+                    f"  docker build -t {q_container} . && docker run -d --restart unless-stopped --name {q_container} -p {port}:{internal_port} --env-file /home/ubuntu/apps/{q_repo}/.env {q_container}; "
                     f"elif [ -f 'package.json' ]; then "
-                    f"  docker run -d --restart unless-stopped --name {container_name} -p {port}:{internal_port} -v /home/ubuntu/apps/{repo_clean}:/app -w /app --env-file /home/ubuntu/apps/{repo_clean}/.env node:20-alpine sh -c 'npm install && (node src/server.js || npm start)'; "
+                    f"  docker run -d --restart unless-stopped --name {q_container} -p {port}:{internal_port} -v /home/ubuntu/apps/{q_repo}:/app -w /app --env-file /home/ubuntu/apps/{q_repo}/.env node:20-alpine sh -c 'npm install && (node src/server.js || npm start)'; "
                     f"elif [ -f 'requirements.txt' ]; then "
-                    f"  docker run -d --restart unless-stopped --name {container_name} -p {port}:{internal_port} -v /home/ubuntu/apps/{repo_clean}:/app -w /app --env-file /home/ubuntu/apps/{repo_clean}/.env python:3.11-slim sh -c 'pip install -r requirements.txt && python app.py'; "
+                    f"  docker run -d --restart unless-stopped --name {q_container} -p {port}:{internal_port} -v /home/ubuntu/apps/{q_repo}:/app -w /app --env-file /home/ubuntu/apps/{q_repo}/.env python:3.11-slim sh -c 'pip install -r requirements.txt && python app.py'; "
                     f"else "
-                    f"  docker run -d --restart unless-stopped --name {container_name} -p {port}:80 nginxdemos/hello:latest; "
+                    f"  docker run -d --restart unless-stopped --name {q_container} -p {port}:80 nginxdemos/hello:latest; "
                     f"fi"
                 )
                 ssh_res = subprocess.run(

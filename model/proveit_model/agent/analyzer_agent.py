@@ -57,16 +57,19 @@ Please return the JSON object conforming to your instructions."""
             )
 
             text = resp.content.strip()
-            # Clean possible markdown fencing
-            if text.startswith("```json"):
-                text = text[7:]
-            elif text.startswith("```"):
-                text = text[3:]
-            if text.endswith("```"):
-                text = text[:-3]
-            text = text.strip()
-
-            parsed = json.loads(text)
+            # Robust JSON extraction from markdown or conversational LLM outputs
+            import re
+            json_match = re.search(r"\{.*\}", text, re.DOTALL)
+            if json_match:
+                parsed = json.loads(json_match.group(0))
+            else:
+                if text.startswith("```json"):
+                    text = text[7:]
+                elif text.startswith("```"):
+                    text = text[3:]
+                if text.endswith("```"):
+                    text = text[:-3]
+                parsed = json.loads(text.strip())
             resolved_port = int(parsed.get("port") or raw_manifest.get("port") or 8000)
             rec_env = parsed.get("recommended_env") or raw_manifest.get("recommended_env", "")
             if "PORT=" in rec_env:

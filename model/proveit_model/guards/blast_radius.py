@@ -32,7 +32,8 @@ class BlastRadiusGuard:
             reasons.append("High resource allocation requested (+20)")
 
         requires_approval = score >= 50
-        allowed = True
+        # If approval is required, allowed is False unless explicit approval is passed
+        allowed = not requires_approval or bool(params.get("approved", False))
 
         return PolicyVerdict(
             allowed=allowed,
