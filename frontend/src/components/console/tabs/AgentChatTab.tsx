@@ -22,6 +22,7 @@ export const AgentChatTab = ({
   bottomRef,
   setView,
   onOpenConnect,
+  onInjectEnv,
 }: {
   user: any;
   githubProfile: any;
@@ -41,6 +42,7 @@ export const AgentChatTab = ({
   bottomRef: React.RefObject<any>;
   setView: (v: string) => void;
   onOpenConnect: () => void;
+  onInjectEnv?: (repo: string) => void;
 }) => {
   return (
     <>
@@ -100,7 +102,7 @@ export const AgentChatTab = ({
             <div style={{ display: "flex", gap: 6 }}>
               {[
                 { fn: () => setView("analyze"), icon: <I.Scan />, label: "Stack" },
-                { fn: () => setView("repoenv"), icon: <I.Sliders />, label: ".env" },
+                { fn: () => { if (onInjectEnv && selectedRepo) onInjectEnv(selectedRepo); else setView("repoenv"); }, icon: <I.Sliders />, label: ".env" },
                 { fn: () => setView("ec2"), icon: <I.Server />, label: "Fleet" },
                 { fn: () => setView("ledger"), icon: <I.Book />, label: "Ledger" }
               ].map(btn => (

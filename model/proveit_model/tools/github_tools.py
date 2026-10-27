@@ -84,6 +84,8 @@ class GitHubTools:
                     raw_repos = res.json()
                     result = []
                     for r in raw_repos:
+                        lang = (r.get("language") or "Other").lower()
+                        port = 8000 if "python" in lang else (3000 if ("typescript" in lang or "javascript" in lang) else 5000)
                         result.append({
                             "id": str(r.get("id")),
                             "name": r.get("full_name") or r.get("name"),
@@ -91,6 +93,9 @@ class GitHubTools:
                             "owner": r.get("owner", {}).get("login", ""),
                             "description": r.get("description") or "GitHub repository",
                             "language": r.get("language") or "Other",
+                            "lang": r.get("language") or "Other",
+                            "default_port": port,
+                            "port": port,
                             "default_branch": r.get("default_branch", "main"),
                             "clone_url": r.get("clone_url"),
                             "html_url": r.get("html_url"),
@@ -100,6 +105,16 @@ class GitHubTools:
                             "updated_at": r.get("updated_at"),
                             "status": "connected",
                         })
+
+                    # Prioritize repositories owned by the authenticated user
+                    try:
+                        profile = self.get_user_profile(token)
+                        my_login = (profile.get("login") or "").lower()
+                        if my_login:
+                            result.sort(key=lambda item: 0 if item.get("owner", "").lower() == my_login else 1)
+                    except Exception:
+                        pass
+
                     return result
                 else:
                     logger.warning(f"GitHub repos fetch returned HTTP {res.status_code}: {res.text[:120]}")

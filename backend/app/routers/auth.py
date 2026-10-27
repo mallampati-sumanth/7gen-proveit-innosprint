@@ -52,6 +52,33 @@ class UserPublic(BaseModel):
     avatar_url: Optional[str] = None
     auth_provider: str = "email"
     is_admin: bool = False
+    phone_number: Optional[str] = None
+    phone_verified: bool = False
+    voice_pin: Optional[str] = "1234"
+    voice_enabled: bool = True
+
+
+class ProfileUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    phone_number: Optional[str] = None
+    voice_pin: Optional[str] = None
+    voice_enabled: Optional[bool] = None
+
+
+def user_to_public(user: User) -> UserPublic:
+    return UserPublic(
+        user_id=user.user_id,
+        username=user.username,
+        email=user.email,
+        name=user.name,
+        avatar_url=user.avatar_url,
+        auth_provider=user.auth_provider,
+        is_admin=user.is_admin,
+        phone_number=user.phone_number,
+        phone_verified=user.phone_verified,
+        voice_pin=user.voice_pin or "1234",
+        voice_enabled=user.voice_enabled if user.voice_enabled is not None else True,
+    )
 
 
 class TokenResponse(BaseModel):
@@ -406,12 +433,30 @@ def get_github_oauth_url():
 @router.get("/me", response_model=UserPublic)
 def get_me(user: User = Depends(get_current_user_obj)):
     """Retrieve profile of currently authenticated user."""
-    return UserPublic(
-        user_id=user.user_id,
-        username=user.username,
-        email=user.email,
-        name=user.name,
-        avatar_url=user.avatar_url,
-        auth_provider=user.auth_provider,
-        is_admin=user.is_admin,
-    )
+    return user_to_public(user)
+
+
+@router.put("/profile", response_model=UserPublic)
+@router.post("/profile", response_model=UserPublic)
+def update_profile(
+    req: ProfileUpdateRequest,
+    user: User = Depends(get_current_user_obj),
+    session: Session = Depends(get_session)
+):
+    """Update profile details such as full name, mobile number, and VoiceOps settings."""
+    if req.name is not None:
+        user.name = req.name.strip()
+    if req.phone_number is not None:
+        clean_phone = req.phone_number.strip().replace(" ", "").replace("-", "")
+        user.phone_number = clean_phone
+        user.phone_verified = bool(clean_phone)
+    if req.voice_pin is not None:
+        user.voice_pin = req.voice_pin.strip()
+    if req.voice_enabled is not None:
+        user.voice_enabled = req.voice_enabled
+
+    user.updated_at = datetime.now(timezone.utc)
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user_to_public(user)

@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
@@ -72,6 +73,25 @@ const CSS = `
     transition: border-color .18s, background .18s, transform .18s;
   }
   .sai-btn-out:hover { border-color: #a3a3a3; background: #fafafa; transform: scale(1.02); }
+
+  .sai-user-chip {
+    font-size: 13px; font-weight: 500; color: #0a0a0a;
+    background: #f5f5f5; border: 1.5px solid #e5e5e5; border-radius: 980px;
+    padding: 6px 14px; display: inline-flex; align-items: center; gap: 7px;
+    text-decoration: none; transition: border-color .15s, background .15s;
+  }
+  .sai-user-chip:hover { border-color: #a3a3a3; background: #eee; }
+  .sai-user-dot {
+    width: 6.5px; height: 6.5px; border-radius: 50%; background: #16a34a;
+  }
+  .sai-btn-signout {
+    font-size: 13px; font-weight: 400; color: #737373;
+    background: transparent; border: 1.5px solid #e5e5e5; border-radius: 980px;
+    padding: 6px 14px; cursor: pointer; transition: all .18s;
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: inherit;
+  }
+  .sai-btn-signout:hover { color: #dc2626; border-color: #fca5a5; background: #fef2f2; }
 
   .sai-hero-section {
     min-height: calc(100vh - 56px);
@@ -309,13 +329,19 @@ function Reveal({ children, delay = 0, className = "" }: { children: React.React
   );
 }
 
-export default function LandingPage() {
+function LandingContent() {
+  const { user, logout, loading } = useAuth();
+  const [mounted, setMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [progress, setProgress] = useState(0);
   const wfTrackRef = useRef<HTMLDivElement>(null);
   const APP = "/console";
   const SIGNIN = "/signup";
   const G = "#16a34a";
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const scrollWf = (dir: "left" | "right") => {
     if (wfTrackRef.current) {
@@ -390,7 +416,24 @@ export default function LandingPage() {
             ))}
           </div>
           <div className="sai-nav-actions">
-            <a href={SIGNIN} className="sai-btn-out">Sign In</a>
+            {mounted && user ? (
+              <>
+                <a href={APP} className="sai-user-chip" title={`Signed in as @${user.username}`}>
+                  <span className="sai-user-dot" />
+                  <span>@{user.username}</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => logout()}
+                  className="sai-btn-signout"
+                  title="Sign out"
+                >
+                  Sign Out
+                </button>
+              </>
+            ) : (
+              !user && <a href={SIGNIN} className="sai-btn-out">Sign In</a>
+            )}
             <a href={APP} className="sai-btn-blk">Go to Dashboard <IcoArrow s={13} c="#fff" /></a>
           </div>
         </div>
@@ -658,5 +701,13 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function LandingPage() {
+  return (
+    <AuthProvider>
+      <LandingContent />
+    </AuthProvider>
   );
 }
