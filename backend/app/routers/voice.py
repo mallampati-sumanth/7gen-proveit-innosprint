@@ -500,14 +500,17 @@ async def telephony_verify_pin(request: Request, session: Session = Depends(get_
 
     # PIN Verified! Now announce account details and prompt for repo name
     repos = get_user_repositories(user, session)
-    user_repos = [r.repo_id.split("/")[-1] for r in repos]
-    repo_list_speech = ", ".join(user_repos[:3]) if user_repos else "Flask or FastAPI"
-    ec2_count = len(session.exec(select(EC2Instance)).all())
+    repo_names = [r.repo_id.split("/")[-1] for r in repos]
+    meaningful = [n for n in repo_names if n.lower() not in [user.username.lower(), "myrepo", "resources"]]
+    priority_kw = ["friday", "osta", "portfolio", "fraud", "draw", "vibe"]
+    featured = [r for r in meaningful if any(kw in r.lower() for kw in priority_kw)]
+    repo_list_speech = ", ".join(featured[:3] if featured else repo_names[:3])
+    display_name = user.name or user.username
 
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Gather input="speech" action="/api/voice/webhook/process-speech?user_id={user.id}" timeout="6" speechTimeout="auto">
-        <Say voice="Polly.Aditi">Authentication verified, {user.username}! You have {len(user_repos)} repositories: {repo_list_speech}, and {ec2_count} EC2 instances running. Which repository would you like to check or deploy?</Say>
+        <Say voice="Polly.Aditi">Authentication verified, {display_name}! You have {len(repos)} repositories connected, including {repo_list_speech}. Which repository would you like to check or deploy?</Say>
     </Gather>
     <Say voice="Polly.Aditi">We did not hear a command. Good bye.</Say>
     <Hangup/>
@@ -866,19 +869,21 @@ def agent_lookup_account(req: AgentLookupAccountRequest, session: Session = Depe
             ),
         }
 
+    display_name = user.name or user.username
+    greeting_prompt = f"Hello {display_name}! Welcome to ProveIt Autonomous DevOps. Please speak your 4-digit security PIN to access your account."
     return {
         "found": True,
         "caller_phone": raw_phone,
         "username": user.username,
-        "name": user.name or user.username,
+        "name": display_name,
         "is_registered": True,
         "voice_enabled": True,
         "requires_pin": True,
+        "spoken_prompt": greeting_prompt,
         "agent_instruction": (
-            f"Caller matches registered user @{user.username} ({user.name or user.username}) calling from {raw_phone}. "
-            "IMPORTANT SECURITY RULE: Do NOT disclose repositories, EC2 instances, or account details yet. "
-            f"Greet the user by name and say: 'Hello {user.name or user.username}! Welcome to ProveIt Autonomous DevOps. Please speak or enter your 4-digit security PIN to access your account.' "
-            f"Wait for them to provide their 4-digit PIN, then call verify_caller with caller_phone: '{raw_phone}' and their PIN."
+            f"Greet the caller by saying: '{greeting_prompt}' "
+            "IMPORTANT: Do not disclose repositories or cloud resources before PIN verification succeeds. "
+            "Wait for them to provide their 4-digit PIN, then call verify_caller with caller_phone and their PIN."
         ),
     }
 
@@ -912,11 +917,19 @@ def agent_verify_caller(req: AgentAuthRequest, session: Session = Depends(get_se
         for i in instances
     ]
 
+    meaningful_repos = [
+        name for name in repo_names
+        if name.lower() not in [user.username.lower(), "myrepo", "resources"]
+    ]
+    priority_keywords = ["friday", "osta", "portfolio", "fraud", "draw", "vibe", "attendance", "inventory"]
+    featured = [r for r in meaningful_repos if any(kw in r.lower() for kw in priority_keywords)]
+    featured_display = (featured[:3] if featured else meaningful_repos[:3]) or repo_names[:3]
+
+    display_name = user.name or user.username
     spoken_summary = (
-        f"Authentication verified, {user.name or user.username}! "
-        f"Your linked mobile {raw_phone} is authenticated. "
-        f"Account details: {len(user_repos)} active repositories ({', '.join(repo_names[:3])}) "
-        f"and {len(instances)} AWS EC2 instances running."
+        f"Authentication verified, {display_name}! "
+        f"Your account is connected to {len(user_repos)} repositories, including {', '.join(featured_display)}. "
+        f"Which repository would you like to deploy?"
     )
 
     return {
