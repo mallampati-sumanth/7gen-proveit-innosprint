@@ -195,6 +195,7 @@ Your diagnostic capabilities:
         target_ec2: str = "",
         injected_env: Dict[str, str] = None,
         environment: str = "production",
+        branch: str = "main",
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Type 4 Autonomous Agent Loop: executes verified, deterministic multi-stage deployment with real-time SSE streaming."""
         import re
@@ -202,8 +203,8 @@ Your diagnostic capabilities:
 
         run_id = f"run-{hashlib.md5(f'{prompt}{time.time()}'.encode()).hexdigest()[:8]}"
         injected_env = injected_env or {}
-        repo_clean = (target_repo or "7gen/react-dashboard").strip()
-        ec2_target = target_ec2 or "i-04b9e9aba542cdd54 (54.88.112.20)"
+        repo_clean = (target_repo or "target-application").strip()
+        ec2_target = target_ec2 or "EC2 Host"
 
         ip_match = re.search(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", str(ec2_target))
         if ip_match:
@@ -229,6 +230,7 @@ Your diagnostic capabilities:
             "target_ec2": ec2_target,
             "ec2_id": ec2_id,
             "ec2_ip": ec2_ip,
+            "branch": branch,
             "environment": environment,
             "injected_env": injected_env,
             "port": 3000,
@@ -259,7 +261,7 @@ Your diagnostic capabilities:
             pass
 
         if not thought_text:
-            thought_text = f"Target repository `{repo_clean}` verified. Directing autonomous deployment to EC2 host `{ec2_target}` with isolated `{environment}` environment variables. Initiating manifest inspection and deterministic security policy verification."
+            thought_text = f"Target repository `{repo_clean}` (branch `{branch}`) verified. Directing autonomous deployment to EC2 host `{ec2_target}` with isolated `{environment}` environment variables. Initiating manifest inspection and deterministic security policy verification."
 
         yield {
             "type": "THOUGHT",
@@ -271,11 +273,11 @@ Your diagnostic capabilities:
 
         # 2. Sequential Autonomous Deployment Pipeline
         pipeline = [
-            ("inspect_repository", lambda: {"repo_url": repo_clean, "branch": "main"}),
+            ("inspect_repository", lambda: {"repo_url": repo_clean, "branch": branch}),
             ("inject_repo_environment", lambda: {"repo": repo_clean, "environment": environment}),
             ("connect_to_ec2_instance", lambda: {"instance_id": ec2_id, "public_ip": ec2_ip}),
             ("evaluate_blast_radius", lambda: {"action": "deploy_ec2", "instance_id": ec2_id, "repo": repo_clean, "port": context.get("port", 3000)}),
-            ("deploy_to_ec2_instance", lambda: {"instance_id": ec2_id, "public_ip": ec2_ip, "repo_name": repo_clean, "port": context.get("port", 3000), "environment": environment, "github_token": context.get("github_token", "")}),
+            ("deploy_to_ec2_instance", lambda: {"instance_id": ec2_id, "public_ip": ec2_ip, "repo_name": repo_clean, "port": context.get("port", 3000), "environment": environment, "branch": branch, "github_token": context.get("github_token", "")}),
             ("verify_ec2_health_probe", lambda: {"public_ip": ec2_ip, "port": context.get("port", 3000), "path": "/health"}),
             ("commit_to_proof_ledger", lambda: {"instance_id": ec2_id, "repo_name": repo_clean, "public_ip": ec2_ip, "port": context.get("port", 3000), "status": "PROVEN"}),
         ]

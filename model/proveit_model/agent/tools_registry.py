@@ -269,6 +269,18 @@ def get_agent_tools_definitions() -> List[ToolDefinition]:
             }
         ),
         ToolDefinition(
+            name="deploy_to_netlify",
+            description="Deploys Jamstack, React, Vite, and static frontend web applications to Netlify Edge CDN.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "repo_url": {"type": "string", "description": "GitHub repository name e.g. 'owner/repo'"},
+                    "branch": {"type": "string", "default": "main"}
+                },
+                "required": ["repo_url"]
+            }
+        ),
+        ToolDefinition(
             name="autonomous_sre_heal",
             description="Autonomous SRE: Diagnoses runtime error logs using LLM reasoning and auto-remediates the service (injects secrets, switches ports, or rolls back).",
             parameters={
@@ -373,6 +385,7 @@ class ToolExecutor:
                 public_ip = arguments.get("public_ip") or context.get("ec2_ip") or "54.158.24.184"
                 repo_name = arguments.get("repo_name") or context.get("target_repo", "")
                 port = int(arguments.get("port") or context.get("port", 3000))
+                branch = arguments.get("branch") or context.get("branch", "main")
                 injected_env = context.get("injected_env", {})
                 gh_token = (
                     arguments.get("github_token")
@@ -386,6 +399,7 @@ class ToolExecutor:
                     repo_name=repo_name,
                     env_vars=injected_env,
                     port=port,
+                    branch=branch,
                     github_token=gh_token,
                 )
                 context["app_url"] = res.get("app_url")
@@ -460,6 +474,14 @@ class ToolExecutor:
                 repo_url = arguments.get("repo_url") or context.get("target_repo", "")
                 branch = arguments.get("branch", "main")
                 res = await cloud_registry.get_provider("railway").deploy_repository(repo_url, branch=branch)
+                context["app_url"] = res.live_url
+                return res.model_dump()
+
+            elif tool_name == "deploy_to_netlify":
+                from backend.app.providers.registry import cloud_registry
+                repo_url = arguments.get("repo_url") or context.get("target_repo", "")
+                branch = arguments.get("branch", "main")
+                res = await cloud_registry.get_provider("netlify").deploy_repository(repo_url, branch=branch)
                 context["app_url"] = res.live_url
                 return res.model_dump()
 

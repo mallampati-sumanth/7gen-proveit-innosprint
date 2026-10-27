@@ -9,7 +9,6 @@ export const AuthScreen: React.FC = () => {
     registerWithEmail,
     loginWithGitHubToken,
     loginWithGitHubOAuth,
-    loginAsDemoAdmin,
     loading,
     error,
     clearError,
@@ -18,8 +17,8 @@ export const AuthScreen: React.FC = () => {
   const [tab, setTab] = useState<"signin" | "register" | "github">("signin");
 
   // Sign in fields
-  const [loginIdentifier, setLoginIdentifier] = useState("admin");
-  const [loginPassword, setLoginPassword] = useState("proveit_demo_secret_2026");
+  const [loginIdentifier, setLoginIdentifier] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
 
   // Register fields
   const [regEmail, setRegEmail] = useState("");
@@ -33,13 +32,6 @@ export const AuthScreen: React.FC = () => {
   const handleTabChange = (nextTab: "signin" | "register" | "github") => {
     clearError();
     setTab(nextTab);
-  };
-
-  const handleDemoAdmin = async () => {
-    const ok = await loginAsDemoAdmin();
-    if (ok) {
-      window.location.href = "/console";
-    }
   };
 
   const submitLogin = async (e: React.FormEvent) => {
@@ -157,46 +149,6 @@ export const AuthScreen: React.FC = () => {
           <p style={{ fontSize: 13, color: "#71717a", margin: 0, lineHeight: 1.55 }}>
             Autonomous AWS EC2 Deployment &amp; Deterministic Proof Engine. Sign in to access your cloud infrastructure.
           </p>
-        </div>
-
-        {/* 1-Click Demo Admin Button */}
-        <button
-          type="button"
-          onClick={handleDemoAdmin}
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: "11px 18px",
-            borderRadius: 980,
-            border: "none",
-            background: "#16a34a",
-            color: "#ffffff",
-            fontSize: 13.5,
-            fontWeight: 600,
-            cursor: loading ? "not-allowed" : "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            boxShadow: "0 4px 14px rgba(22, 163, 74, 0.28)",
-            transition: "all .18s ease",
-          }}
-          onMouseEnter={e => {
-            (e.currentTarget as HTMLElement).style.background = "#15803d";
-            (e.currentTarget as HTMLElement).style.transform = "scale(1.01)";
-          }}
-          onMouseLeave={e => {
-            (e.currentTarget as HTMLElement).style.background = "#16a34a";
-            (e.currentTarget as HTMLElement).style.transform = "none";
-          }}
-        >
-           1-Click Sign In as Demo Admin
-        </button>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ flex: 1, height: 1, background: "#e5e5e5" }} />
-          <span style={{ fontSize: 10.5, color: "#71717a", fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase" }}>or continue with</span>
-          <div style={{ flex: 1, height: 1, background: "#e5e5e5" }} />
         </div>
 
         {/* Auth Mode Tabs */}

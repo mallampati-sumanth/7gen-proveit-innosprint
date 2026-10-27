@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 class Settings(BaseSettings):
@@ -93,10 +93,11 @@ class Settings(BaseSettings):
     TELEPHONY_AGENT_PHONE: str = "+91 80 4736 1820"
     TELEPHONY_WEBHOOK_BASE_URL: Optional[str] = "http://localhost:8000"
 
-    # Multi-Cloud Providers (Vercel, Render, Railway)
+    # Multi-Cloud Providers (Vercel, Render, Railway, Netlify)
     VERCEL_TOKEN: Optional[str] = None
     RENDER_API_KEY: Optional[str] = None
     RAILWAY_TOKEN: Optional[str] = None
+    NETLIFY_TOKEN: Optional[str] = None
     MULTICLOUD_SANDBOX_ENABLED: bool = True
 
     @field_validator("CORS_ORIGINS", "ALLOWED_REGIONS", "ALLOWED_INSTANCE_TYPES", mode="before")
@@ -130,4 +131,8 @@ if settings.RENDER_API_KEY:
     os.environ["RENDER_API_KEY"] = settings.RENDER_API_KEY
 if settings.RAILWAY_TOKEN:
     os.environ["RAILWAY_TOKEN"] = settings.RAILWAY_TOKEN
+if settings.GITHUB_TOKEN:
+    os.environ["GITHUB_TOKEN"] = settings.GITHUB_TOKEN
+elif "GITHUB_TOKEN" in os.environ:
+    del os.environ["GITHUB_TOKEN"]
 

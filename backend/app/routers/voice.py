@@ -251,7 +251,7 @@ def simulate_voice_call(req: SimulateCallRequest, session: Session = Depends(get
             "call_sid": call_sid,
         }
 
-    # 4b. Multi-Cloud Target Deployment Intent (Vercel, Render, Railway)
+    # 4b. Multi-Cloud Target Deployment Intent (Vercel, Render, Railway, Netlify)
     target_platform = None
     if "vercel" in lower_prompt:
         target_platform = "vercel"
@@ -259,6 +259,8 @@ def simulate_voice_call(req: SimulateCallRequest, session: Session = Depends(get
         target_platform = "render"
     elif "railway" in lower_prompt:
         target_platform = "railway"
+    elif "netlify" in lower_prompt:
+        target_platform = "netlify"
 
     if target_platform:
         prov = CloudProviderRegistry.get_provider(target_platform)

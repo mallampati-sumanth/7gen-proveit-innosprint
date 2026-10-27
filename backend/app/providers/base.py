@@ -19,6 +19,15 @@ class DeploymentResult(BaseModel):
             data["created_at"] = time.time()
         super().__init__(**data)
 
+    @property
+    def public_url(self) -> Optional[str]:
+        return self.live_url or self.preview_url
+
+    @property
+    def proof_hash(self) -> str:
+        import hashlib
+        return hashlib.sha256(f"{self.provider}:{self.deployment_id}:{self.live_url}".encode()).hexdigest()
+
 
 class BaseCloudProvider(ABC):
     name: str
@@ -39,9 +48,37 @@ class BaseCloudProvider(ABC):
         env_vars: Optional[Dict[str, str]] = None,
         commit_hash: Optional[str] = None,
         service_type: Optional[str] = None,
+        github_token: Optional[str] = None,
+        **kwargs: Any,
     ) -> DeploymentResult:
         """Triggers deployment and returns DeploymentResult with live URL or status."""
         pass
+
+    def deploy(
+        self,
+        repo_name: str,
+        branch: str = "main",
+        environment: str = "production",
+        env_vars: Optional[Dict[str, str]] = None,
+    ) -> DeploymentResult:
+        """Synchronous wrapper for deploy_repository for sync telephony and script handlers."""
+        import asyncio
+        import concurrent.futures
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    return pool.submit(
+                        asyncio.run,
+                        self.deploy_repository(repo_name, branch=branch, env_vars=env_vars),
+                    ).result()
+            return loop.run_until_complete(
+                self.deploy_repository(repo_name, branch=branch, env_vars=env_vars)
+            )
+        except Exception:
+            return asyncio.run(
+                self.deploy_repository(repo_name, branch=branch, env_vars=env_vars)
+            )
 
     @abstractmethod
     async def get_deployment_status(self, deployment_id: str) -> DeploymentResult:

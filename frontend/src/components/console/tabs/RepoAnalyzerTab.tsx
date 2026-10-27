@@ -188,12 +188,17 @@ export const RepoAnalyzerTab = ({
               }}>
                 <I.Sliders /> Configure .env
               </button>
-              <button onClick={() => onDeploy(result.repository)} style={{
-                display: "flex", alignItems: "center", gap: 6, padding: "8px 18px", borderRadius: 8,
-                border: "none", background: "var(--orange)", color: "#fff",
-                fontSize: 12.5, fontWeight: 700, cursor: "pointer",
-              }}>
-                <I.Play /> Deploy to EC2
+              <button
+                onClick={() => onDeploy(result.repository)}
+                title="Deploy to Vercel, Netlify, Render, Railway, or AWS EC2"
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, padding: "8px 18px", borderRadius: 8,
+                  border: "none", background: "linear-gradient(135deg, #f97316 0%, #ea580c 100%)", color: "#fff",
+                  fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+                  boxShadow: "0 2px 8px rgba(249, 115, 22, 0.25)",
+                }}
+              >
+                <I.Play /> Deploy App (Multi-Cloud)
               </button>
             </div>
           </div>

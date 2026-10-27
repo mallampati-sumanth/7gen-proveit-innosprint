@@ -86,6 +86,7 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     expires_in_minutes: int
     user: UserPublic
+    github_token: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -398,15 +399,8 @@ async def github_auth(req: GitHubAuthRequest, session: Session = Depends(get_ses
         access_token=token,
         token_type="bearer",
         expires_in_minutes=settings.JWT_EXPIRATION_MINUTES,
-        user=UserPublic(
-            user_id=user.user_id,
-            username=user.username,
-            email=user.email,
-            name=user.name,
-            avatar_url=user.avatar_url,
-            auth_provider=user.auth_provider,
-            is_admin=user.is_admin,
-        ),
+        user=user_to_public(user),
+        github_token=gh_token,
     )
 
 

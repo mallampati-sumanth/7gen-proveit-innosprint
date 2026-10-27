@@ -1,3 +1,4 @@
+import os
 import time
 import json
 import hashlib
@@ -7,8 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
+from backend.app.config import settings
 from backend.app.db import get_session
-from backend.app.entities.models import Run, LedgerEntry
+from backend.app.entities.models import Run, LedgerEntry, RepoConfig, RepoEnvVar
 from backend.app.providers.registry import cloud_registry
 from backend.app.services.self_healing import sre_service, DiagnosisResult
 
@@ -17,11 +19,14 @@ router = APIRouter(prefix="/api/multicloud", tags=["multicloud"])
 
 class MultiCloudDeployRequest(BaseModel):
     repo_name: str
-    provider: str = "render"  # "vercel" | "render" | "railway" | "aws"
-    branch: Optional[str] = "main"
+    provider: str = "render"  # "vercel" | "render" | "railway" | "netlify" | "aws"
+    branch: Optional[str] = None
+    environment: Optional[str] = "production"
+    framework: Optional[str] = None
     env_vars: Optional[Dict[str, str]] = {}
     commit_hash: Optional[str] = None
     target_ec2: Optional[str] = None
+    github_token: Optional[str] = None
 
 
 class SREHealRequest(BaseModel):
@@ -48,7 +53,7 @@ def get_deployment_recommendation(
     framework: Optional[str] = Query(None),
 ):
     """
-    AI Codebase Analyzer: Recommends the optimal deployment provider (Vercel, Render, Railway, AWS)
+    AI Codebase Analyzer: Recommends the optimal deployment provider (Vercel, Render, Railway, Netlify, AWS)
     based on language, framework, and repository architecture.
     """
     rec = cloud_registry.recommend_provider(repo_name, language, framework)
@@ -59,27 +64,80 @@ def get_deployment_recommendation(
 async def deploy_to_cloud(req: MultiCloudDeployRequest, session: Session = Depends(get_session)):
     """
     Unified Multi-Cloud Deployment Dispatcher:
-    Deploys application to Vercel, Render, Railway, or AWS EC2 without leaving ProveIt.
+    Deploys application to Vercel, Render, Railway, Netlify, or AWS EC2 without leaving ProveIt.
     Generates live URL and commits SHA-256 seal to Proof Ledger.
     """
     provider_name = req.provider.lower().strip()
     clean_repo = req.repo_name.strip()
+    target_env = req.environment or "production"
+
+    # Dynamically resolve branch and framework from connected RepoConfig if not explicitly provided
+    repo_cfg = session.exec(select(RepoConfig).where(RepoConfig.repo_id == clean_repo)).first()
+    active_branch = req.branch or (repo_cfg.default_branch if repo_cfg and repo_cfg.default_branch else "main")
+    active_framework = req.framework or (repo_cfg.framework if repo_cfg and repo_cfg.framework else None)
+
+    # Dynamically merge per-repo stored environment variables from the database
+    db_envs = session.exec(
+        select(RepoEnvVar).where(
+            RepoEnvVar.repo_id == clean_repo,
+            RepoEnvVar.environment == target_env,
+        )
+    ).all()
+    merged_env: Dict[str, str] = {e.key: e.value.strip("'\"") for e in db_envs}
+    if req.env_vars:
+        merged_env.update(req.env_vars)
+    if "ENVIRONMENT" not in merged_env:
+        merged_env["ENVIRONMENT"] = target_env
+
+    # Ensure active GitHub token is synchronized
+    active_gh_token = req.github_token or settings.GITHUB_TOKEN or os.getenv("GITHUB_TOKEN")
+    if active_gh_token:
+        settings.GITHUB_TOKEN = active_gh_token
+        os.environ["GITHUB_TOKEN"] = active_gh_token
 
     # 1. Dispatch deployment through target provider
     provider = cloud_registry.get_provider(provider_name)
     if not provider and provider_name != "aws":
-        raise HTTPException(status_code=400, detail=f"Unsupported cloud provider: '{provider_name}'. Supported: vercel, render, railway, aws")
+        raise HTTPException(status_code=400, detail=f"Unsupported cloud provider: '{provider_name}'. Supported: vercel, render, railway, netlify, aws")
 
+    inspector_url = ""
     if provider:
         result = await provider.deploy_repository(
             repo_name=clean_repo,
-            branch=req.branch or "main",
-            env_vars=req.env_vars,
+            branch=active_branch,
+            env_vars=merged_env,
             commit_hash=req.commit_hash,
+            service_type=active_framework,
+            github_token=active_gh_token,
         )
-        live_url = result.live_url
+        live_url = result.live_url or ""
         dpl_id = result.deployment_id
         logs = result.build_logs
+        inspector_url = result.metadata.get("inspector_url", "")
+
+        if result.status == "FAILED":
+            run_id = f"run-{provider_name[:3]}-{hashlib.md5(f'{clean_repo}{time.time()}'.encode()).hexdigest()[:6]}"
+            fail_entry = Run(
+                run_id=run_id,
+                prompt=f"Multi-Cloud Autonomous Deploy: {clean_repo} deployment to {provider_name.upper()} failed",
+                target_repo=clean_repo,
+                target_ec2=req.target_ec2 or f"{provider_name.upper()}_HOSTED",
+                environment=target_env,
+                cloud_mode=provider_name,
+                status="FAILED",
+                blast_radius_score=0.99,
+                sandbox_tested=True,
+            )
+            session.add(fail_entry)
+            session.commit()
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": result.metadata.get("error") or "Deployment failed.",
+                    "status": "FAILED",
+                    "logs": logs,
+                }
+            )
     else:
         # AWS fallback
         rand_hash = hashlib.md5(f"{clean_repo}{time.time()}".encode()).hexdigest()[:8]
@@ -87,7 +145,8 @@ async def deploy_to_cloud(req: MultiCloudDeployRequest, session: Session = Depen
         live_url = f"http://54.210.14.88:8000"
         logs = [
             f"Target: AWS EC2 Instance (us-east-1)",
-            f"Cloned {clean_repo} to /opt/proveit/apps/{clean_repo}",
+            f"Cloned {clean_repo} to /opt/proveit/apps/{clean_repo} (branch: {active_branch})",
+            f"Injected {len(merged_env)} environment variables into {target_env} container",
             f"Docker daemon built container proveit/{clean_repo}:latest",
             f"Container running on port 8000 (0.0.0.0:8000->8000/tcp)",
             f"Public IP assigned: {live_url}"
@@ -100,7 +159,7 @@ async def deploy_to_cloud(req: MultiCloudDeployRequest, session: Session = Depen
         prompt=f"Multi-Cloud Autonomous Deploy: {clean_repo} deployed to {provider_name.upper()} ({live_url})",
         target_repo=clean_repo,
         target_ec2=req.target_ec2 or f"{provider_name.upper()}_HOSTED",
-        environment="production",
+        environment=target_env,
         cloud_mode=provider_name,
         status="SUCCESS",
         blast_radius_score=0.12,
@@ -133,9 +192,28 @@ async def deploy_to_cloud(req: MultiCloudDeployRequest, session: Session = Depen
         "repo_name": clean_repo,
         "live_url": live_url,
         "deployment_id": dpl_id,
+        "inspector_url": inspector_url,
         "proof_sha256": sha_hash,
         "build_logs": logs,
         "message": f"Successfully deployed {clean_repo} to {provider_name.capitalize()}! Live at {live_url}",
+    }
+
+
+@router.get("/status/{provider_name}/{deployment_id}")
+async def get_cloud_deployment_status(provider_name: str, deployment_id: str):
+    """Fetches real-time deployment status from the target cloud provider."""
+    provider = cloud_registry.get_provider(provider_name.lower().strip())
+    if not provider:
+        raise HTTPException(status_code=404, detail=f"Provider '{provider_name}' not found.")
+    res = await provider.get_deployment_status(deployment_id)
+    return {
+        "provider": provider_name,
+        "deployment_id": deployment_id,
+        "status": res.status,
+        "live_url": res.live_url,
+        "preview_url": res.preview_url,
+        "build_logs": res.build_logs,
+        "metadata": res.metadata,
     }
 
 

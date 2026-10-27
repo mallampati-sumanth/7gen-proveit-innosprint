@@ -2,30 +2,44 @@
 
 import React, { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 function CallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { saveAuthSession } = useAuth();
   const [status, setStatus] = useState<"processing" | "success" | "error">("processing");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const executedRef = React.useRef(false);
 
   useEffect(() => {
+    if (executedRef.current) return;
+
     const code = searchParams.get("code");
     const errorParam = searchParams.get("error_description") || searchParams.get("error");
 
     if (errorParam) {
+      executedRef.current = true;
       setStatus("error");
       setErrorMessage(errorParam);
       return;
     }
 
     if (!code) {
-      setStatus("error");
-      setErrorMessage("No authorization code found in GitHub redirect parameters.");
-      return;
+      // Wait for search params to populate without flashing error
+      const timeout = setTimeout(() => {
+        if (!executedRef.current && !searchParams.get("code")) {
+          executedRef.current = true;
+          setStatus("error");
+          setErrorMessage("No authorization code found in GitHub redirect parameters.");
+        }
+      }, 2000);
+      return () => clearTimeout(timeout);
     }
+
+    executedRef.current = true;
 
     const exchangeCode = async () => {
       try {
@@ -40,15 +54,24 @@ function CallbackContent() {
           throw new Error(data.detail || "Failed to exchange GitHub authorization code.");
         }
 
+        // 1. Immediately store credentials & full user object in localStorage
         if (typeof window !== "undefined") {
           localStorage.setItem("proveit_token", data.access_token);
           localStorage.setItem("proveit_user", data.user.username);
+          localStorage.setItem("proveit_user_data", JSON.stringify(data.user));
+          if (data.github_token) {
+            localStorage.setItem("proveit_github_pat", data.github_token);
+          }
         }
+
+        // 2. Commit session to React AuthContext
+        saveAuthSession(data.access_token, data.user);
 
         setStatus("success");
         setTimeout(() => {
-          router.push("/");
-        }, 800);
+          // Hard navigation to console ensures full fresh hydration of auth, state & API headers
+          window.location.href = "/console";
+        }, 500);
       } catch (err: any) {
         setStatus("error");
         setErrorMessage(err.message || "Could not complete GitHub authentication.");
@@ -56,7 +79,7 @@ function CallbackContent() {
     };
 
     exchangeCode();
-  }, [searchParams, router]);
+  }, [searchParams, router, saveAuthSession]);
 
   return (
     <div style={{

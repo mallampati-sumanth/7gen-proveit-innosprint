@@ -11,8 +11,8 @@ export const LoginModal = ({
   onClose: () => void;
   onLoginSuccess: (user: string, token: string) => void;
 }) => {
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("proveit_demo_secret_2026");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,11 +93,6 @@ export const LoginModal = ({
             padding: "10px", borderRadius: 8, border: "none", background: "var(--orange)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer",
           }}>
             {loading ? "Signing in…" : "Sign In"}
-          </button>
-          <button onClick={() => handleLogin("admin", "proveit_demo_secret_2026")} disabled={loading} style={{
-            padding: "9px", borderRadius: 8, border: "1px solid var(--orange-border)", background: "var(--orange-bg)", color: "var(--orange)", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-          }}>
-            1-Click Demo Admin Sign In
           </button>
         </div>
       </div>

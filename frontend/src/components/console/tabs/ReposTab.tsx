@@ -153,6 +153,27 @@ export const ReposTab = ({
         </div>
       </div>
 
+      {/* Multi-Cloud Target Support Bar */}
+      <div style={{
+        marginBottom: 20, padding: "12px 18px", borderRadius: 10,
+        background: "var(--bg-card2)", border: "1px solid var(--border)",
+        display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, fontWeight: 700, color: "var(--text-1)" }}>
+          <span style={{ color: "var(--orange)" }}>⚡ Multi-Cloud Targets:</span>
+          <span style={{ fontSize: 11.5, color: "var(--text-3)", fontWeight: 400 }}>
+            Click &quot;Deploy App&quot; on any repo to deploy instantly to:
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 6, background: "rgba(255,255,255,0.06)", border: "1px solid var(--border)", color: "var(--text-1)" }}>Vercel (Next.js)</span>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 6, background: "rgba(0,199,183,0.12)", border: "1px solid rgba(0,199,183,0.3)", color: "#2dd4bf" }}>Netlify (React/Vite)</span>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 6, background: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.3)", color: "#34d399" }}>Render (FastAPI/Node)</span>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 6, background: "rgba(192,132,252,0.12)", border: "1px solid rgba(192,132,252,0.3)", color: "#c084fc" }}>Railway (Docker)</span>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 6, background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#fbbf24" }}>AWS EC2</span>
+        </div>
+      </div>
+
       {/* Add Repo Form */}
       {showAdd && (
         <div style={{ marginBottom: 20, padding: 18, borderRadius: 12, background: "var(--bg-card)", border: "1px solid var(--orange-border)" }}>
@@ -353,8 +374,12 @@ export const ReposTab = ({
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
-                  {r.description || "Deployable via Autonomous EC2 Agent"}
+                <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span>{r.description || "Deployable to Vercel, Netlify, Render, Railway, or AWS EC2"}</span>
+                  <span style={{ fontSize: 10.5, color: "var(--text-4)" }}>·</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 600, color: "var(--text-3)", fontFamily: "JetBrains Mono, monospace" }}>
+                    Targets: Vercel · Netlify · Render · Railway · AWS EC2
+                  </span>
                 </div>
               </div>
 
@@ -367,12 +392,17 @@ export const ReposTab = ({
                   <I.Sliders /> Inject .env
                 </button>
 
-                <button onClick={() => onDeploy(r.name)} style={{
-                  display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", borderRadius: 8,
-                  border: "none", background: "var(--orange)", color: "#fff",
-                  fontSize: 12.5, fontWeight: 700, cursor: "pointer",
-                }}>
-                  <I.Play /> Deploy to EC2
+                <button
+                  onClick={() => onDeploy(r.name)}
+                  title="Deploy to Vercel, Netlify, Render, Railway, or AWS EC2"
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", borderRadius: 8,
+                    border: "none", background: "linear-gradient(135deg, #f97316 0%, #ea580c 100%)", color: "#fff",
+                    fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+                    boxShadow: "0 2px 8px rgba(249, 115, 22, 0.25)",
+                  }}
+                >
+                  <I.Play /> Deploy App
                 </button>
 
                 <button onClick={() => onDeleteRepo(r.name)} title="Remove Repository" style={{

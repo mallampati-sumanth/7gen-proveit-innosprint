@@ -3,6 +3,7 @@ from backend.app.providers.base import BaseCloudProvider
 from backend.app.providers.vercel_provider import VercelProvider
 from backend.app.providers.render_provider import RenderProvider
 from backend.app.providers.railway_provider import RailwayProvider
+from backend.app.providers.netlify_provider import NetlifyProvider
 
 
 class CloudProviderRegistry:
@@ -13,6 +14,7 @@ class CloudProviderRegistry:
             "vercel": VercelProvider(),
             "render": RenderProvider(),
             "railway": RailwayProvider(),
+            "netlify": NetlifyProvider(),
         }
 
     @classmethod
@@ -34,7 +36,7 @@ class CloudProviderRegistry:
             {
                 "id": "vercel",
                 "name": "Vercel",
-                "icon": "▲",
+                "icon": "",
                 "category": "Frontend & Edge",
                 "description": "Zero-config edge network for Next.js, React, and serverless APIs.",
                 "badges": ["Edge CDN", "Instant Preview", "Next.js"],
@@ -42,7 +44,7 @@ class CloudProviderRegistry:
             {
                 "id": "render",
                 "name": "Render",
-                "icon": "⬢",
+                "icon": "",
                 "category": "Web Services & APIs",
                 "description": "Auto-scaling cloud for FastAPI, Flask, Express, and Docker apps.",
                 "badges": ["Free TLS", "Auto-Deploy", "FastAPI / Node"],
@@ -50,15 +52,23 @@ class CloudProviderRegistry:
             {
                 "id": "railway",
                 "name": "Railway",
-                "icon": "🚂",
+                "icon": "",
                 "category": "Full-Stack & Containers",
                 "description": "Deploy code, Dockerfiles, and persistent databases effortlessly.",
                 "badges": ["PostgreSQL", "Nixpacks", "Microservices"],
             },
             {
+                "id": "netlify",
+                "name": "Netlify",
+                "icon": "",
+                "category": "Jamstack & CDN",
+                "description": "Global edge deployment for React, Vue, Vite, and static sites.",
+                "badges": ["Global CDN", "Instant Forms", "Functions"],
+            },
+            {
                 "id": "aws",
                 "name": "AWS EC2",
-                "icon": "☁",
+                "icon": "",
                 "category": "Infrastructure (IaaS)",
                 "description": "Isolated virtual machines with root Docker daemon access and full control.",
                 "badges": ["Custom VM", "Root Access", "VPC"],
@@ -76,7 +86,16 @@ class CloudProviderRegistry:
         f_lower = (framework or "").lower()
         l_lower = (detected_language or "").lower()
 
-        # Check frontend/next
+        # Check Jamstack / Vite / Static Sites -> Netlify
+        if any(kw in r_lower or kw in f_lower for kw in ["vite", "static", "jamstack", "gatsby", "hugo", "jekyll", "eleventy", "netlify"]):
+            return {
+                "recommended_provider": "netlify",
+                "confidence": 0.95,
+                "reason": "Static site or Jamstack architecture detected. Netlify provides unmatched Edge CDN global acceleration, continuous git builds, and instant previews.",
+                "ideal_for": "Vite, React SPA, Static HTML, Jamstack, Edge Workers",
+            }
+
+        # Check frontend/next -> Vercel
         if any(kw in r_lower or kw in f_lower for kw in ["next", "react", "vue", "astro", "svelte", "frontend", "web", "landing", "ui"]):
             return {
                 "recommended_provider": "vercel",

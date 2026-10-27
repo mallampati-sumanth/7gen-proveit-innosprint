@@ -1,4 +1,5 @@
 import sys
+import asyncio
 sys.path.insert(0, "model")
 import pytest
 from proveit_model.guards.blast_radius import BlastRadiusGuard
@@ -53,45 +54,49 @@ def test_tools_registry_definitions():
     assert "commit_to_proof_ledger" in tool_names
 
 
-@pytest.mark.asyncio
-async def test_tools_registry_execution():
-    provider = MockLLMProvider()
-    github = GitHubTools(token=settings.GITHUB_TOKEN)
-    aws = AWSTools(region="us-east-1", mock_mode=True)
-    guard = BlastRadiusGuard()
-    analyzer = RepoAnalyzerAgent(provider=provider)
-    executor = ToolExecutor(github=github, aws=aws, guard=guard, analyzer=analyzer)
+def test_tools_registry_execution():
+    async def _test():
+        provider = MockLLMProvider()
+        github = GitHubTools(token=settings.GITHUB_TOKEN)
+        aws = AWSTools(region="us-east-1", mock_mode=True)
+        guard = BlastRadiusGuard()
+        analyzer = RepoAnalyzerAgent(provider=provider)
+        executor = ToolExecutor(github=github, aws=aws, guard=guard, analyzer=analyzer)
 
-    res = await executor.execute_tool(
-        tool_name="inspect_repository",
-        arguments={"repo_url": "pallets/flask"},
-        context={"target_repo": "pallets/flask"},
-    )
-    assert res is not None
-    assert "framework" in res or "runtime" in res or "repository" in res
+        res = await executor.execute_tool(
+            tool_name="inspect_repository",
+            arguments={"repo_url": "pallets/flask"},
+            context={"target_repo": "pallets/flask"},
+        )
+        assert res is not None
+        assert "framework" in res or "runtime" in res or "repository" in res
+
+    asyncio.run(_test())
 
 
-@pytest.mark.asyncio
-async def test_autonomous_react_loop_streaming():
-    agent = ProveItAgent(cloud_mode="mock", llm_provider="groq", github_token=settings.GITHUB_TOKEN)
-    agent.provider = MockLLMProvider()
-    agent.analyzer.provider = MockLLMProvider()
-    
-    events = []
-    async for event in agent.execute_run_stream(
-        prompt="Deploy pallets/flask to EC2 in staging",
-        target_repo="pallets/flask",
-        target_ec2="i-0a8f9c12345678 (54.210.14.88)",
-        environment="staging",
-    ):
-        events.append(event)
-    
-    event_types = [e["type"] for e in events]
-    assert "RUN_START" in event_types
-    assert "TOOL_START" in event_types
-    assert "TOOL_RESULT" in event_types
-    assert "RUN_COMPLETE" in event_types
+def test_autonomous_react_loop_streaming():
+    async def _test():
+        agent = ProveItAgent(cloud_mode="mock", llm_provider="groq", github_token=settings.GITHUB_TOKEN)
+        agent.provider = MockLLMProvider()
+        agent.analyzer.provider = MockLLMProvider()
+        
+        events = []
+        async for event in agent.execute_run_stream(
+            prompt="Deploy pallets/flask to EC2 in staging",
+            target_repo="pallets/flask",
+            target_ec2="i-0a8f9c12345678 (54.210.14.88)",
+            environment="staging",
+        ):
+            events.append(event)
+        
+        event_types = [e["type"] for e in events]
+        assert "RUN_START" in event_types
+        assert "TOOL_START" in event_types
+        assert "TOOL_RESULT" in event_types
+        assert "RUN_COMPLETE" in event_types
 
-    complete_event = next(e for e in events if e["type"] == "RUN_COMPLETE")
-    assert complete_event["summary"]["status"] == "PROVEN"
-    assert "proof_hash" in complete_event["summary"]
+        complete_event = next(e for e in events if e["type"] == "RUN_COMPLETE")
+        assert complete_event["summary"]["status"] == "PROVEN"
+        assert "proof_hash" in complete_event["summary"]
+
+    asyncio.run(_test())

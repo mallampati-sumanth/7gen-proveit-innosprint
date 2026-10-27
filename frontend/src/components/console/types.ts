@@ -174,7 +174,7 @@ export const PAGE_META: Record<string, { title: string; sub: string; badge: stri
   secrets: { title: "Vault & Credentials", sub: "Encrypted AWS IAM, GitHub Tokens, and Gemini API keys", badge: "AES-256" },
   logs: { title: "System Telemetry", sub: "Real-time streaming agent telemetry from FastAPI and AWS CloudWatch", badge: "Streaming" },
   activity: { title: "Deploy History", sub: "Complete history of autonomous deployments, self-healing events & verification", badge: "Database" },
-  settings: { title: "Settings & Safety", sub: "Themes, blast radius safety gates, and cloud execution parameters", badge: "Control" },
+  settings: { title: "Settings & Connections", sub: "Cloud provider API keys, autonomous SRE safety gates & operator credentials", badge: "Control" },
 };
 
 /* ─────────── DEPLOYMENT STAGES META ─────────── */

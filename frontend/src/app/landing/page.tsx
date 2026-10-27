@@ -332,6 +332,7 @@ function Reveal({ children, delay = 0, className = "" }: { children: React.React
 function LandingContent() {
   const { user, logout, loading } = useAuth();
   const [mounted, setMounted] = useState(false);
+  const [cachedUser, setCachedUser] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
   const [progress, setProgress] = useState(0);
   const wfTrackRef = useRef<HTMLDivElement>(null);
@@ -341,7 +342,16 @@ function LandingContent() {
 
   useEffect(() => {
     setMounted(true);
+    if (typeof window !== "undefined") {
+      try {
+        const u = localStorage.getItem("proveit_user");
+        const t = localStorage.getItem("proveit_token");
+        if (t && u) setCachedUser(u);
+      } catch {}
+    }
   }, []);
+
+  const activeUsername = user?.username || cachedUser;
 
   const scrollWf = (dir: "left" | "right") => {
     if (wfTrackRef.current) {
@@ -416,14 +426,14 @@ function LandingContent() {
             ))}
           </div>
           <div className="sai-nav-actions">
-            {mounted && user ? (
-              <a href={APP} className="sai-user-chip" title={`Signed in as @${user.username}`}>
+            {mounted && activeUsername ? (
+              <a href={APP} className="sai-user-chip" title={`Signed in as @${activeUsername}`}>
                 <span className="sai-user-dot" />
-                <span>@{user.username}</span>
+                <span>@{activeUsername}</span>
               </a>
-            ) : (
-              !loading && !user && <a href={SIGNIN} className="sai-btn-out">Sign In</a>
-            )}
+            ) : mounted && !activeUsername ? (
+              <a href={SIGNIN} className="sai-btn-out">Sign In</a>
+            ) : null}
             <a href={APP} className="sai-btn-blk">Go to Dashboard <IcoArrow s={13} c="#fff" /></a>
           </div>
         </div>
@@ -695,9 +705,5 @@ function LandingContent() {
 }
 
 export default function LandingPage() {
-  return (
-    <AuthProvider>
-      <LandingContent />
-    </AuthProvider>
-  );
+  return <LandingContent />;
 }

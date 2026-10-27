@@ -24,6 +24,7 @@ export interface AuthContextType {
   token: string | null;
   loading: boolean;
   error: string | null;
+  saveAuthSession: (token: string, user: AuthUser) => void;
   loginWithEmail: (usernameOrEmail: string, password: string) => Promise<boolean>;
   registerWithEmail: (email: string, username: string, password: string, name?: string) => Promise<boolean>;
   loginWithGitHubToken: (token: string) => Promise<boolean>;
@@ -41,14 +42,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<AuthUser | null>(() => {
     if (typeof window !== "undefined") {
       try {
-        const storedUser = localStorage.getItem("proveit_user");
         const storedToken = localStorage.getItem("proveit_token");
+        const storedUserData = localStorage.getItem("proveit_user_data");
+        const storedUser = localStorage.getItem("proveit_user");
+        if (storedToken && storedUserData) {
+          return JSON.parse(storedUserData);
+        }
         if (storedToken && storedUser) {
           return {
             user_id: "usr_cached",
             username: storedUser,
             email: `${storedUser}@proveit.cloud`,
-            auth_provider: "email",
+            auth_provider: "github",
             is_admin: storedUser === "admin",
           };
         }
@@ -68,20 +73,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return null;
   });
 
-  const [loading, setLoading] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      return false;
-    }
-    return true;
-  });
+  const [loading, setLoading] = useState<boolean>(false);
 
   const [error, setError] = useState<string | null>(null);
 
   const clearError = () => setError(null);
 
+  const saveAuthSession = (t: string, u: AuthUser) => {
+    setToken(t);
+    setAuthToken(t);
+    setUser(u);
+    setError(null);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("proveit_token", t);
+      localStorage.setItem("proveit_user", u.username);
+      localStorage.setItem("proveit_user_data", JSON.stringify(u));
+      window.dispatchEvent(new Event("proveit_auth_changed"));
+    }
+  };
+
   // Validate existing stored token on mount in background
   useEffect(() => {
     let active = true;
+
+    const handleAuthChange = () => {
+      if (typeof window === "undefined") return;
+      const storedToken = localStorage.getItem("proveit_token");
+      const storedUserData = localStorage.getItem("proveit_user_data");
+      const storedUser = localStorage.getItem("proveit_user");
+      if (storedToken) {
+        setToken(storedToken);
+        setAuthToken(storedToken);
+        if (storedUserData) {
+          try {
+            setUser(JSON.parse(storedUserData));
+          } catch {
+            if (storedUser) {
+              setUser({
+                user_id: "usr_cached",
+                username: storedUser,
+                email: `${storedUser}@proveit.cloud`,
+                auth_provider: "github",
+                is_admin: storedUser === "admin",
+              });
+            }
+          }
+        }
+      } else {
+        setUser(null);
+        setToken(null);
+        setAuthToken("");
+      }
+    };
+
+    window.addEventListener("storage", handleAuthChange);
+    window.addEventListener("proveit_auth_changed", handleAuthChange);
 
     // Safety fallback timer: Ensure loading never hangs beyond 1.2s
     const safetyTimer = setTimeout(() => {
@@ -96,20 +142,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         const storedToken = localStorage.getItem("proveit_token");
+        const storedUserData = localStorage.getItem("proveit_user_data");
         const storedUser = localStorage.getItem("proveit_user");
         if (!storedToken) {
           if (active) setLoading(false);
           return;
         }
 
-        if (storedUser && active) {
-          setUser({
-            user_id: "usr_cached",
-            username: storedUser,
-            email: `${storedUser}@proveit.cloud`,
-            auth_provider: "email",
-            is_admin: storedUser === "admin",
-          });
+        if (active) {
+          if (storedUserData) {
+            try {
+              setUser(JSON.parse(storedUserData));
+            } catch {
+              if (storedUser) {
+                setUser({
+                  user_id: "usr_cached",
+                  username: storedUser,
+                  email: `${storedUser}@proveit.cloud`,
+                  auth_provider: "github",
+                  is_admin: storedUser === "admin",
+                });
+              }
+            }
+          } else if (storedUser) {
+            setUser({
+              user_id: "usr_cached",
+              username: storedUser,
+              email: `${storedUser}@proveit.cloud`,
+              auth_provider: "github",
+              is_admin: storedUser === "admin",
+            });
+          }
           setToken(storedToken);
           setAuthToken(storedToken);
           setLoading(false);
@@ -134,11 +197,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setUser(userData);
               setToken(storedToken);
               setAuthToken(storedToken);
+              localStorage.setItem("proveit_user_data", JSON.stringify(userData));
             }
           } else if (res.status === 401) {
             // Token definitely expired or revoked
             localStorage.removeItem("proveit_token");
             localStorage.removeItem("proveit_user");
+            localStorage.removeItem("proveit_user_data");
             if (active) {
               setUser(null);
               setToken(null);
@@ -161,19 +226,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       active = false;
       clearTimeout(safetyTimer);
+      window.removeEventListener("storage", handleAuthChange);
+      window.removeEventListener("proveit_auth_changed", handleAuthChange);
     };
   }, []);
-
-  const saveAuthSession = (t: string, u: AuthUser) => {
-    setToken(t);
-    setAuthToken(t);
-    setUser(u);
-    setError(null);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("proveit_token", t);
-      localStorage.setItem("proveit_user", u.username);
-    }
-  };
 
   const loginWithEmail = async (usernameOrEmail: string, password: string): Promise<boolean> => {
     setLoading(true);
@@ -333,7 +389,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (typeof window !== "undefined") {
       localStorage.removeItem("proveit_token");
       localStorage.removeItem("proveit_user");
+      localStorage.removeItem("proveit_user_data");
       localStorage.removeItem("proveit_github_pat");
+      window.dispatchEvent(new Event("proveit_auth_changed"));
     }
   };
 
@@ -344,6 +402,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         loading,
         error,
+        saveAuthSession,
         loginWithEmail,
         registerWithEmail,
         loginWithGitHubToken,

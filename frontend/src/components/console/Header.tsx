@@ -64,7 +64,7 @@ export const Header = ({
 
       {/* Right actions */}
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        {currentUser ? (
+        {currentUser && (
           <div style={{
             display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 980,
             border: "1.5px solid var(--border)", background: "transparent", color: "var(--text-1)",
@@ -74,15 +74,6 @@ export const Header = ({
             <span>@{currentUser}</span>
             <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)" }} />
           </div>
-        ) : (
-          <button onClick={onOpenLogin} style={{
-            display: "flex", alignItems: "center", gap: 6, padding: "5px 14px", borderRadius: 980,
-            border: "1.5px solid var(--border)", background: "transparent", color: "var(--text-1)",
-            fontSize: 12, fontWeight: 500, cursor: "pointer",
-          }}>
-            <I.User />
-            <span>Sign In</span>
-          </button>
         )}
 
         <button onClick={onOpenConnect} style={{
@@ -110,15 +101,19 @@ export const Header = ({
           {theme === "dark" ? <I.Sun /> : <I.Moon />}
         </button>
 
-        <button onClick={onDeployClick} style={{
-          display: "flex", alignItems: "center", gap: 6, padding: "7px 18px", borderRadius: 980,
-          border: "none", background: "var(--btn-primary-bg)", color: "var(--btn-primary-text)",
-          fontSize: 13, fontWeight: 600, cursor: "pointer",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-          transition: "transform .18s cubic-bezier(.34,1.56,.64,1), box-shadow .18s",
-        }}>
+        <button
+          onClick={onDeployClick}
+          title="Deploy to Vercel, Netlify, Render, Railway, or AWS EC2"
+          style={{
+            display: "flex", alignItems: "center", gap: 7, padding: "7px 16px", borderRadius: 980,
+            border: "none", background: "linear-gradient(135deg, #f97316 0%, #ea580c 100%)", color: "#ffffff",
+            fontSize: 13, fontWeight: 700, cursor: "pointer",
+            boxShadow: "0 3px 12px rgba(249, 115, 22, 0.3)",
+            transition: "transform .18s cubic-bezier(.34,1.56,.64,1), box-shadow .18s",
+          }}
+        >
           <I.Play />
-          <span>Deploy to EC2</span>
+          <span>Deploy</span>
         </button>
 
         {currentUser && onLogout && (

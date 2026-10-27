@@ -25,7 +25,7 @@ export const NAV = [
     items: [
       { id: "logs", icon: <I.Terminal />, label: "System Telemetry", badge: "Live" },
       { id: "activity", icon: <I.Activity />, label: "Deploy History" },
-      { id: "settings", icon: <I.Settings />, label: "Settings & Safety" },
+      { id: "settings", icon: <I.Settings />, label: "Settings & Connections", badge: "Keys" },
     ]
   },
 ];
@@ -347,6 +347,12 @@ export const Sidebar = ({
                   }}
                 >
                   {selectedInstance ? selectedInstance.slice(0, 13) + "…" : "Auto-Select"}
+                </span>
+              </div>
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border-soft)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 10, color: "var(--text-4)", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.03em" }}>Cloud Engines</span>
+                <span style={{ fontSize: 10, color: "var(--text-3)", fontWeight: 600 }}>
+                  Multi-Cloud Ready
                 </span>
               </div>
             </>

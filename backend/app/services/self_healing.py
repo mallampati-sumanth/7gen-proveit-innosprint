@@ -190,5 +190,50 @@ class AutonomousSREService:
 
         return diagnosis
 
+    def diagnose_and_heal(
+        self,
+        repo_name: str,
+        error_log: str,
+        environment: str = "production",
+        exit_code: Optional[int] = None,
+        env_vars: Optional[Dict[str, str]] = None,
+        commit_hash: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Synchronous/direct diagnose and heal helper for voice and agent workflows."""
+        import asyncio
+        import concurrent.futures
+
+        async def _run():
+            diag = await self.diagnose_anomaly(
+                target_service=repo_name,
+                error_log=error_log,
+                exit_code=exit_code,
+                env_vars=env_vars,
+                commit_hash=commit_hash,
+            )
+            healed = await self.execute_healing(diag)
+            return {
+                "status": "HEALED",
+                "diagnosis": {
+                    "incident_id": healed.incident_id,
+                    "target_service": healed.target_service,
+                    "root_cause": healed.root_cause,
+                    "suggested_action": healed.prescribed_action,
+                    "explanation": healed.explanation,
+                    "severity": healed.severity,
+                },
+                "proof_hash": healed.proof_hash,
+                "remediation_log": healed.remediation_log,
+            }
+
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    return pool.submit(asyncio.run, _run()).result()
+            return loop.run_until_complete(_run())
+        except Exception:
+            return asyncio.run(_run())
+
 
 sre_service = AutonomousSREService()

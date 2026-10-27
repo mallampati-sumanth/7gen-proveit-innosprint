@@ -3,9 +3,9 @@ import { RepoItem, EC2InstanceItem, EnvTarget, API_BASE } from "../types";
 import { I } from "../icons";
 
 interface CloudProviderOption {
-  id: "vercel" | "render" | "railway" | "aws";
+  id: "vercel" | "render" | "railway" | "netlify" | "aws";
   name: string;
-  icon: string;
+  color: string;
   category: string;
   description: string;
   badge: string;
@@ -15,15 +15,23 @@ const PROVIDERS: CloudProviderOption[] = [
   {
     id: "vercel",
     name: "Vercel",
-    icon: "▲",
+    color: "#ffffff",
     category: "Edge & Frontend",
     description: "Zero-config edge network for Next.js, React, and serverless APIs.",
     badge: "Next.js / Edge",
   },
   {
+    id: "netlify",
+    name: "Netlify",
+    color: "#2dd4bf",
+    category: "Jamstack & CDN",
+    description: "Global edge deployment for React, Vue, Vite, and static sites.",
+    badge: "Jamstack / Static",
+  },
+  {
     id: "render",
     name: "Render",
-    icon: "⬢",
+    color: "#34d399",
     category: "Web Services & APIs",
     description: "Auto-scaling cloud for FastAPI, Flask, Node, and Docker apps.",
     badge: "FastAPI / Docker",
@@ -31,7 +39,7 @@ const PROVIDERS: CloudProviderOption[] = [
   {
     id: "railway",
     name: "Railway",
-    icon: "🚂",
+    color: "#c084fc",
     category: "Full-Stack & DBs",
     description: "Deploy code, Dockerfiles, and persistent databases effortlessly.",
     badge: "Microservices",
@@ -39,7 +47,7 @@ const PROVIDERS: CloudProviderOption[] = [
   {
     id: "aws",
     name: "AWS EC2",
-    icon: "☁",
+    color: "#fbbf24",
     category: "Infrastructure (IaaS)",
     description: "Isolated virtual machines with root Docker daemon access.",
     badge: "Custom VM",
@@ -65,11 +73,11 @@ export const DeploymentWizardModal = ({
   selectedInstance: string;
   onRepoChange?: (repo: string) => void;
   onInstanceChange?: (inst: string) => void;
-  onLaunch: (repo: string, instance: string, env: EnvTarget) => void;
+  onLaunch: (repo: string, instance: string, env: EnvTarget, provider?: string) => void;
 }) => {
   const [activeTab, setActiveTab] = useState<"deploy" | "sre">("deploy");
   const [repo, setRepo] = useState(selectedRepo || repos[0]?.name || "");
-  const [provider, setProvider] = useState<"vercel" | "render" | "railway" | "aws">("render");
+  const [provider, setProvider] = useState<"vercel" | "render" | "railway" | "netlify" | "aws">("render");
   const [inst, setInst] = useState(selectedInstance || instances[0]?.instance_id || "NEW_INSTANCE");
   const [env, setEnv] = useState<EnvTarget>("production");
 
@@ -98,7 +106,7 @@ export const DeploymentWizardModal = ({
         if (res.ok) {
           const data = await res.json();
           setRecommendation(data);
-          if (data.recommended_provider && ["vercel", "render", "railway", "aws"].includes(data.recommended_provider)) {
+          if (data.recommended_provider && ["vercel", "render", "railway", "netlify", "aws"].includes(data.recommended_provider)) {
             setProvider(data.recommended_provider as any);
           }
         }
@@ -135,35 +143,10 @@ export const DeploymentWizardModal = ({
 
   if (!open) return null;
 
-  // Handle Multi-Cloud Deployment
-  const handleMultiCloudDeploy = async () => {
-    if (provider === "aws") {
-      onLaunch(repo, inst, env);
-      onClose();
-      return;
-    }
-
-    setDeploying(true);
-    setDeployResult(null);
-
-    try {
-      const res = await fetch(`${API_BASE}/api/multicloud/deploy`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          repo_name: repo,
-          provider: provider,
-          branch: "main",
-          env_vars: { ENVIRONMENT: env },
-        }),
-      });
-      const data = await res.json();
-      setDeployResult(data);
-    } catch (err: any) {
-      setDeployResult({ status: "ERROR", message: err?.message || "Deployment request failed." });
-    } finally {
-      setDeploying(false);
-    }
+  // Handle Deployment: immediately close modal and route to Pipeline Tracker with live updates
+  const handleMultiCloudDeploy = () => {
+    onLaunch(repo, inst, env, provider);
+    onClose();
   };
 
   // Trigger SRE Autonomous Self-Healing
@@ -228,7 +211,7 @@ export const DeploymentWizardModal = ({
               </span>
             </div>
             <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
-              Deploy to Vercel, Render, Railway, or AWS with AI stack recommendation and autonomous self-healing.
+              Deploy to Vercel, Render, Railway, Netlify, or AWS with AI stack recommendation and autonomous self-healing.
             </div>
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-3)", cursor: "pointer", fontSize: 18 }}><I.X /></button>
@@ -337,9 +320,9 @@ export const DeploymentWizardModal = ({
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{ fontSize: 16 }}>{p.icon}</span>
-                            <span style={{ fontSize: 13.5, fontWeight: 800, color: isSelected ? "var(--text-1)" : "var(--text-2)" }}>{p.name}</span>
+                          <div>
+                            <div style={{ fontSize: 13.5, fontWeight: 800, color: isSelected ? "var(--text-1)" : "var(--text-2)" }}>{p.name}</div>
+                            <div style={{ fontSize: 10, color: p.color, fontWeight: 600 }}>{p.badge}</div>
                           </div>
                           {isRec && (
                             <span style={{
@@ -351,7 +334,7 @@ export const DeploymentWizardModal = ({
                             </span>
                           )}
                         </div>
-                        <div style={{ fontSize: 11.5, color: "var(--text-3)", lineHeight: 1.35 }}>{p.description}</div>
+                        <div style={{ fontSize: 11.5, color: "var(--text-3)", lineHeight: 1.35, marginTop: 4 }}>{p.description}</div>
                       </div>
                     );
                   })}
@@ -586,8 +569,8 @@ export const DeploymentWizardModal = ({
                 {deploying && <I.Loader />}
                 <span>
                   {deploying
-                    ? `Deploying to ${provider.toUpperCase()}...`
-                    : `Deploy to ${provider.toUpperCase()} ${PROVIDERS.find(p => p.id === provider)?.icon || ""}`}
+                    ? `Deploying to ${PROVIDERS.find(p => p.id === provider)?.name || provider.toUpperCase()}...`
+                    : `Deploy to ${PROVIDERS.find(p => p.id === provider)?.name || provider.toUpperCase()}`}
                 </span>
               </button>
             )}

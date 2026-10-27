@@ -57,10 +57,12 @@ def get_active_agent_instance() -> ProveItAgent:
 
 if settings.GITHUB_TOKEN:
     os.environ["GITHUB_TOKEN"] = settings.GITHUB_TOKEN
+elif "GITHUB_TOKEN" in os.environ:
+    del os.environ["GITHUB_TOKEN"]
 
 agent_instance = get_active_agent_instance()
 
-github_tools = GitHubTools(token=settings.GITHUB_TOKEN)
+github_tools = GitHubTools(token=settings.GITHUB_TOKEN or "")
 aws_tools = AWSTools(region=settings.AWS_REGION, mock_mode=(settings.CLOUD_MODE == "mock"))
 
 
@@ -70,6 +72,7 @@ class DeployRequest(BaseModel):
     target_repo: Optional[str] = None
     target_ec2: Optional[str] = None
     environment: str = "production"
+    branch: Optional[str] = None
     injected_env: Optional[Dict[str, str]] = None
 
 
@@ -1236,6 +1239,9 @@ async def stream_agent_execution(run_id: str, session: Session = Depends(get_ses
         except Exception:
             pass
 
+    repo_cfg = session.exec(select(RepoConfig).where(RepoConfig.repo_id == target_repo)).first()
+    active_branch = repo_cfg.default_branch if repo_cfg and repo_cfg.default_branch else "main"
+
     async def event_generator():
         if settings.GITHUB_TOKEN:
             os.environ["GITHUB_TOKEN"] = settings.GITHUB_TOKEN
@@ -1249,6 +1255,7 @@ async def stream_agent_execution(run_id: str, session: Session = Depends(get_ses
             target_ec2=target_ec2,
             injected_env=injected_env,
             environment=environment,
+            branch=active_branch,
         ):
             # If run completed, record to ledger and update Run status using fresh engine session
             if event.get("type") == "RUN_COMPLETE":
