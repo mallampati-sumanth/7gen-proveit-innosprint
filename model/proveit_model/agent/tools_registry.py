@@ -380,6 +380,69 @@ def get_agent_tools_definitions() -> List[ToolDefinition]:
 
 
 
+def _get_cloud_registry():
+    """Dynamically loads cloud_registry without hard static import coupling."""
+    try:
+        import importlib
+        reg_module = importlib.import_module("backend.app.providers.registry")
+        return getattr(reg_module, "cloud_registry", None)
+    except Exception as e:
+        logger.warning(f"Could not load cloud_registry: {e}")
+        return None
+
+
+def _get_sarvam_voice():
+    """Dynamically loads sarvam_voice_service without hard static import coupling."""
+    try:
+        import importlib
+        voice_module = importlib.import_module("backend.app.services.sarvam_voice")
+        return getattr(voice_module, "sarvam_voice_service", None)
+    except Exception as e:
+        logger.warning(f"Could not load sarvam_voice_service: {e}")
+        return None
+
+
+def _get_sre_service():
+    """Dynamically loads sre_service without hard static import coupling."""
+    try:
+        import importlib
+        sre_module = importlib.import_module("backend.app.services.self_healing")
+        return getattr(sre_module, "sre_service", None)
+    except Exception as e:
+        logger.warning(f"Could not load sre_service: {e}")
+        return None
+
+
+def _get_db_repo_configs() -> List[Dict[str, Any]]:
+    """Dynamically loads repository configurations from SQLite/SQLModel DB without static coupling."""
+    try:
+        import importlib
+        db_mod = importlib.import_module("backend.app.db")
+        models_mod = importlib.import_module("backend.app.entities.models")
+        sqlmodel_mod = importlib.import_module("sqlmodel")
+
+        engine = getattr(db_mod, "engine", None)
+        RepoConfig = getattr(models_mod, "RepoConfig", None)
+        Session = getattr(sqlmodel_mod, "Session", None)
+        select = getattr(sqlmodel_mod, "select", None)
+
+        if not (engine and RepoConfig and Session and select):
+            return []
+
+        with Session(engine) as sess:
+            configs = sess.exec(select(RepoConfig)).all()
+            return [
+                {
+                    "repo_id": getattr(c, "repo_id", ""),
+                    "language": getattr(c, "language", None),
+                }
+                for c in configs
+            ]
+    except Exception as e:
+        logger.warning(f"Could not load repo configs from database: {e}")
+        return []
+
+
 class ToolExecutor:
     """Executes agent tool calls using live backend cloud tools."""
 
@@ -539,12 +602,14 @@ class ToolExecutor:
                 }
 
             elif tool_name == "deploy_to_vercel":
-                from backend.app.providers.registry import cloud_registry
+                cloud_reg = _get_cloud_registry()
+                if not cloud_reg:
+                    return {"status": "ERROR", "error": "Cloud registry is unavailable."}
                 repo_url = arguments.get("repo_url") or context.get("target_repo", "")
                 branch = arguments.get("branch", "main")
                 root_dir = arguments.get("root_directory") or context.get("root_directory")
                 env = arguments.get("environment") or context.get("environment", "production")
-                prov = cloud_registry.get_provider("vercel")
+                prov = cloud_reg.get_provider("vercel")
                 if not prov:
                     return {"status": "ERROR", "error": "Provider 'vercel' not found or unconfigured."}
                 res = await prov.deploy_repository(repo_url, branch=branch, root_directory=root_dir, environment=env)
@@ -552,12 +617,14 @@ class ToolExecutor:
                 return res.model_dump() if hasattr(res, "model_dump") else (res.__dict__ if hasattr(res, "__dict__") else res)
 
             elif tool_name == "deploy_to_render":
-                from backend.app.providers.registry import cloud_registry
+                cloud_reg = _get_cloud_registry()
+                if not cloud_reg:
+                    return {"status": "ERROR", "error": "Cloud registry is unavailable."}
                 repo_url = arguments.get("repo_url") or context.get("target_repo", "")
                 branch = arguments.get("branch", "main")
                 root_dir = arguments.get("root_directory") or context.get("root_directory")
                 env = arguments.get("environment") or context.get("environment", "production")
-                prov = cloud_registry.get_provider("render")
+                prov = cloud_reg.get_provider("render")
                 if not prov:
                     return {"status": "ERROR", "error": "Provider 'render' not found or unconfigured."}
                 res = await prov.deploy_repository(repo_url, branch=branch, root_directory=root_dir, environment=env)
@@ -565,12 +632,14 @@ class ToolExecutor:
                 return res.model_dump() if hasattr(res, "model_dump") else (res.__dict__ if hasattr(res, "__dict__") else res)
 
             elif tool_name == "deploy_to_railway":
-                from backend.app.providers.registry import cloud_registry
+                cloud_reg = _get_cloud_registry()
+                if not cloud_reg:
+                    return {"status": "ERROR", "error": "Cloud registry is unavailable."}
                 repo_url = arguments.get("repo_url") or context.get("target_repo", "")
                 branch = arguments.get("branch", "main")
                 root_dir = arguments.get("root_directory") or context.get("root_directory")
                 env = arguments.get("environment") or context.get("environment", "production")
-                prov = cloud_registry.get_provider("railway")
+                prov = cloud_reg.get_provider("railway")
                 if not prov:
                     return {"status": "ERROR", "error": "Provider 'railway' not found or unconfigured."}
                 res = await prov.deploy_repository(repo_url, branch=branch, root_directory=root_dir, environment=env)
@@ -578,12 +647,14 @@ class ToolExecutor:
                 return res.model_dump() if hasattr(res, "model_dump") else (res.__dict__ if hasattr(res, "__dict__") else res)
 
             elif tool_name == "deploy_to_netlify":
-                from backend.app.providers.registry import cloud_registry
+                cloud_reg = _get_cloud_registry()
+                if not cloud_reg:
+                    return {"status": "ERROR", "error": "Cloud registry is unavailable."}
                 repo_url = arguments.get("repo_url") or context.get("target_repo", "")
                 branch = arguments.get("branch", "main")
                 root_dir = arguments.get("root_directory") or context.get("root_directory")
                 env = arguments.get("environment") or context.get("environment", "production")
-                prov = cloud_registry.get_provider("netlify")
+                prov = cloud_reg.get_provider("netlify")
                 if not prov:
                     return {"status": "ERROR", "error": "Provider 'netlify' not found or unconfigured."}
                 res = await prov.deploy_repository(repo_url, branch=branch, root_directory=root_dir, environment=env)
@@ -591,54 +662,51 @@ class ToolExecutor:
                 return res.model_dump() if hasattr(res, "model_dump") else (res.__dict__ if hasattr(res, "__dict__") else res)
 
             elif tool_name == "search_user_repositories":
-                from backend.app.services.sarvam_voice import sarvam_voice_service
-                from backend.app.providers.registry import cloud_registry
-
                 query = arguments.get("query") or arguments.get("repo_name", "")
-                user_repos = []
-                try:
-                    from backend.app.db import engine
-                    from backend.app.entities.models import RepoConfig
-                    from sqlmodel import Session, select
-                    with Session(engine) as sess:
-                        configs = sess.exec(select(RepoConfig)).all()
-                        user_repos = [c.repo_id for c in configs]
-                except Exception as db_err:
-                    logger.warning(f"Could not load repos from DB: {db_err}")
+                configs = _get_db_repo_configs()
+                user_repos = [c["repo_id"] for c in configs if c.get("repo_id")]
                 if not user_repos:
                     user_repos = ["pallets/flask", "fastapi/fastapi", "vercel/next.js"]
 
-                search_res = sarvam_voice_service.search_repositories(query, user_repos)
+                voice_svc = _get_sarvam_voice()
+                if voice_svc:
+                    search_res = voice_svc.search_repositories(query, user_repos)
+                else:
+                    exact = [r for r in user_repos if query.lower() in r.lower()]
+                    search_res = {
+                        "query": query,
+                        "matched_repo": exact[0] if exact else (user_repos[0] if user_repos else None),
+                        "confidence": 0.8 if exact else 0.4,
+                        "matches": [{"repo_id": r, "score": 0.8} for r in exact],
+                        "total_repositories_checked": len(user_repos),
+                    }
+
                 matched = search_res.get("matched_repo")
-                rec = cloud_registry.recommend_provider(matched or query) if matched else {}
+                cloud_reg = _get_cloud_registry()
+                rec = cloud_reg.recommend_provider(matched or query) if (cloud_reg and matched) else {}
                 search_res["recommendation"] = rec
                 search_res["recommended_provider"] = rec.get("recommended_provider", "vercel")
                 return search_res
 
             elif tool_name == "list_user_repositories":
-                from backend.app.providers.registry import cloud_registry
-                repos_list = []
-                try:
-                    from backend.app.db import engine
-                    from backend.app.entities.models import RepoConfig
-                    from sqlmodel import Session, select
-                    with Session(engine) as sess:
-                        configs = sess.exec(select(RepoConfig)).all()
-                        repos_list = [
-                            {
-                                "repo_id": c.repo_id,
-                                "short_name": c.repo_id.split("/")[-1],
-                                "language": c.language,
-                                "recommended_provider": cloud_registry.recommend_provider(c.repo_id, c.language).get("recommended_provider"),
-                            }
-                            for c in configs
-                        ]
-                except Exception as db_err:
-                    logger.warning(f"Could not list repos: {db_err}")
+                cloud_reg = _get_cloud_registry()
+                configs = _get_db_repo_configs()
+                repos_list = [
+                    {
+                        "repo_id": c["repo_id"],
+                        "short_name": c["repo_id"].split("/")[-1],
+                        "language": c.get("language"),
+                        "recommended_provider": (
+                            cloud_reg.recommend_provider(c["repo_id"], c.get("language")).get("recommended_provider")
+                            if cloud_reg else "vercel"
+                        ),
+                    }
+                    for c in configs
+                    if c.get("repo_id")
+                ]
                 return {"count": len(repos_list), "repositories": repos_list}
 
             elif tool_name == "deploy_to_cloud":
-                from backend.app.providers.registry import cloud_registry
                 repo_name = arguments.get("repo_name") or context.get("target_repo", "")
                 provider_name = (arguments.get("provider") or "vercel").lower().strip()
                 branch = arguments.get("branch", "main")
@@ -660,7 +728,10 @@ class ToolExecutor:
                         github_token=gh_token,
                     )
                 else:
-                    prov = cloud_registry.get_provider(provider_name)
+                    cloud_reg = _get_cloud_registry()
+                    if not cloud_reg:
+                        return {"status": "ERROR", "error": "Cloud registry is unavailable."}
+                    prov = cloud_reg.get_provider(provider_name)
                     if not prov:
                         return {"status": "ERROR", "error": f"Unsupported provider: '{provider_name}'"}
                     res = await prov.deploy_repository(
@@ -674,23 +745,27 @@ class ToolExecutor:
                     return res.model_dump() if hasattr(res, "model_dump") else (res.__dict__ if hasattr(res, "__dict__") else res)
 
             elif tool_name == "get_deployment_status":
-                from backend.app.providers.registry import cloud_registry
+                cloud_reg = _get_cloud_registry()
+                if not cloud_reg:
+                    return {"status": "ERROR", "error": "Cloud registry is unavailable."}
                 provider_name = (arguments.get("provider") or "vercel").lower().strip()
                 deployment_id = arguments.get("deployment_id", "")
                 repo_name = arguments.get("repo_name")
 
-                prov = cloud_registry.get_provider(provider_name)
+                prov = cloud_reg.get_provider(provider_name)
                 if not prov:
                     return {"status": "ERROR", "error": f"Provider '{provider_name}' not found."}
                 res = await prov.get_deployment_status(deployment_id=deployment_id, repo_name=repo_name)
                 return res.model_dump() if hasattr(res, "model_dump") else (res.__dict__ if hasattr(res, "__dict__") else res)
 
             elif tool_name == "autonomous_sre_heal":
-                from backend.app.services.self_healing import sre_service
+                sre_svc = _get_sre_service()
+                if not sre_svc:
+                    return {"status": "ERROR", "error": "Autonomous SRE healing service unavailable."}
                 target = arguments.get("target_service") or context.get("target_repo", "service")
                 error_log = arguments.get("error_log", "Error: Process exited with status 1")
-                diagnosis = await sre_service.diagnose_anomaly(target_service=target, error_log=error_log)
-                healed = await sre_service.execute_healing(diagnosis)
+                diagnosis = await sre_svc.diagnose_anomaly(target_service=target, error_log=error_log)
+                healed = await sre_svc.execute_healing(diagnosis)
                 return healed.model_dump() if hasattr(healed, "model_dump") else (healed.__dict__ if hasattr(healed, "__dict__") else healed)
 
             else:
