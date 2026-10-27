@@ -412,6 +412,66 @@ docker run -d --restart unless-stopped --name proveit-live-app -p {app_port}:80 
             "message": f"Successfully launched EC2 instance {inst_id} ({public_ip}) in AWS ({reg}) with Docker pre-configured."
         }
 
+    def ensure_ssh_access(self, instance_id: str, public_ip: str, user: str = "ubuntu") -> str:
+        """Ensures the proveit_deploy_key is authorized on the EC2 instance using EC2 Instance Connect fallback.
+        Returns the working SSH username ('ubuntu' or 'ec2-user')."""
+        from pathlib import Path
+        clean_ip = (public_ip or "").strip()
+        keys_dir = Path(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../backend/keys")))
+        priv_path = keys_dir / "proveit_deploy_key.pem"
+        pub_path = keys_dir / "proveit_deploy_key.pub"
+
+        if not priv_path.exists() or not pub_path.exists():
+            self.generate_deploy_key_pair()
+
+        pub_key = pub_path.read_text(encoding="utf-8").strip()
+
+        # Check existing connection with ubuntu or ec2-user
+        for try_u in [user, "ubuntu", "ec2-user"]:
+            try:
+                test_run = subprocess.run(
+                    ["ssh", "-i", str(priv_path), "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=3", f"{try_u}@{clean_ip}", "echo OK"],
+                    capture_output=True, text=True, timeout=5
+                )
+                if test_run.returncode == 0:
+                    return try_u
+            except Exception:
+                pass
+
+        # If regular SSH failed, use AWS EC2 Instance Connect to inject key
+        has_aws_creds = bool(os.getenv("AWS_ACCESS_KEY_ID") and not os.getenv("AWS_ACCESS_KEY_ID", "").startswith("your_"))
+        if has_aws_creds and instance_id and not instance_id.startswith("i-0a8f"):
+            try:
+                import boto3
+                ec2_client = boto3.client("ec2", region_name=self.region)
+                desc = ec2_client.describe_instances(InstanceIds=[instance_id])
+                inst_data = desc["Reservations"][0]["Instances"][0]
+                az = inst_data.get("Placement", {}).get("AvailabilityZone", f"{self.region}a")
+
+                eic_client = boto3.client("ec2-instance-connect", region_name=self.region)
+                for try_u in ["ubuntu", "ec2-user"]:
+                    try:
+                        eic_res = eic_client.send_ssh_public_key(
+                            InstanceId=instance_id,
+                            InstanceOSUser=try_u,
+                            SSHPublicKey=pub_key,
+                            AvailabilityZone=az
+                        )
+                        if eic_res.get("Success"):
+                            # Immediately make it permanent in ~/.ssh/authorized_keys
+                            cmd = f"mkdir -p ~/.ssh && echo '{pub_key}' >> ~/.ssh/authorized_keys && sort -u ~/.ssh/authorized_keys -o ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+                            subprocess.run(
+                                ["ssh", "-i", str(priv_path), "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5", f"{try_u}@{clean_ip}", cmd],
+                                capture_output=True, text=True, timeout=10
+                            )
+                            return try_u
+                    except Exception as eic_err:
+                        logger.warning(f"EC2 Instance Connect attempt for user {try_u} failed: {eic_err}")
+            except Exception as e:
+                logger.error(f"Failed to ensure SSH access via EC2 Instance Connect on {instance_id}: {e}")
+
+        return "ubuntu"
+
     def test_ec2_connection(self, instance_id: str, public_ip: str) -> Dict[str, Any]:
         """Test SSH/TCP handshake and Docker daemon response on EC2 with real socket timing."""
         clean_ip = (public_ip or "").strip()
@@ -463,9 +523,10 @@ docker run -d --restart unless-stopped --name proveit-live-app -p {app_port}:80 
             if os.path.exists(keys_path) and re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", clean_ip):
                 try:
                     import subprocess
+                    ssh_user = self.ensure_ssh_access(instance_id, clean_ip)
                     d_check = subprocess.run(
-                        ["ssh", "-i", keys_path, "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=3", f"ubuntu@{clean_ip}", "docker --version && docker ps >/dev/null 2>&1"],
-                        capture_output=True, text=True, timeout=5
+                        ["ssh", "-i", keys_path, "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=4", f"{ssh_user}@{clean_ip}", "docker --version && docker ps >/dev/null 2>&1"],
+                        capture_output=True, text=True, timeout=6
                     )
                     if d_check.returncode == 0:
                         docker_ok = True
@@ -473,10 +534,10 @@ docker run -d --restart unless-stopped --name proveit-live-app -p {app_port}:80 
                         docker_msg = f"{docker_ver} verified and online."
                     else:
                         # Attempt autonomous Docker bootstrap on host
-                        install_cmd = "sudo apt-get update -y && sudo apt-get install -y docker.io && sudo usermod -aG docker ubuntu && sudo chmod 666 /var/run/docker.sock && sudo systemctl enable --now docker"
+                        install_cmd = f"sudo apt-get update -y && sudo apt-get install -y docker.io && sudo usermod -aG docker {ssh_user} && sudo chmod 666 /var/run/docker.sock && sudo systemctl enable --now docker"
                         install_run = subprocess.run(
-                            ["ssh", "-i", keys_path, "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=4", f"ubuntu@{clean_ip}", install_cmd],
-                            capture_output=True, text=True, timeout=35
+                            ["ssh", "-i", keys_path, "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5", f"{ssh_user}@{clean_ip}", install_cmd],
+                            capture_output=True, text=True, timeout=45
                         )
                         if install_run.returncode == 0:
                             docker_ok = True
@@ -566,6 +627,7 @@ docker run -d --restart unless-stopped --name proveit-live-app -p {app_port}:80 
             try:
                 import subprocess
                 import shlex
+                ssh_user = self.ensure_ssh_access(instance_id, clean_ip)
                 gh_token = (github_token or os.getenv("GITHUB_TOKEN", "") or "").strip()
                 if gh_token and not gh_token.startswith("your_"):
                     clone_url = f"https://x-access-token:{gh_token}@github.com/{repo_name}.git"
@@ -593,9 +655,10 @@ docker run -d --restart unless-stopped --name proveit-live-app -p {app_port}:80 
                 q_clone = shlex.quote(clone_url)
                 q_container = shlex.quote(container_safe)
                 b_branch = shlex.quote(branch or "main")
+                base_apps = f"/home/{ssh_user}/apps"
 
                 remote_script = (
-                    f"mkdir -p /home/ubuntu/apps && cd /home/ubuntu/apps && "
+                    f"mkdir -p {base_apps} && cd {base_apps} && "
                     f"if [ -d '{q_repo}/.git' ]; then "
                     f"  cd '{q_repo}' && (git pull origin {b_branch} 2>/dev/null || git pull origin main 2>/dev/null || git pull 2>/dev/null || true); "
                     f"else "
@@ -603,24 +666,24 @@ docker run -d --restart unless-stopped --name proveit-live-app -p {app_port}:80 
                     f"  (git clone -b {b_branch} {q_clone} '{q_repo}' 2>/dev/null || git clone {q_clone} '{q_repo}' 2>/dev/null || git clone https://github.com/{repo_name}.git '{q_repo}' 2>/dev/null || true); "
                     f"  mkdir -p '{q_repo}'; cd '{q_repo}'; "
                     f"fi && "
-                    f"cat << 'ENVEOF' > /home/ubuntu/apps/{q_repo}/.env\n{env_payload}\nENVEOF\n"
+                    f"cat << 'ENVEOF' > {base_apps}/{q_repo}/.env\n{env_payload}\nENVEOF\n"
                     # Auto-provision background databases if requested in .env
-                    f"if grep -qiE 'postgres|psycopg|5432' /home/ubuntu/apps/{q_repo}/.env; then "
+                    f"if grep -qiE 'postgres|psycopg|5432' {base_apps}/{q_repo}/.env; then "
                     f"  if ! docker ps --format '{{{{.Names}}}}' | grep -q '^proveit-postgres$'; then "
                     f"    docker run -d --restart unless-stopped --name proveit-postgres -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=postgres postgres:15-alpine 2>/dev/null || true; "
                     f"  fi; "
                     f"fi; "
-                    f"if grep -qiE 'mysql|3306' /home/ubuntu/apps/{q_repo}/.env; then "
+                    f"if grep -qiE 'mysql|3306' {base_apps}/{q_repo}/.env; then "
                     f"  if ! docker ps --format '{{{{.Names}}}}' | grep -q '^proveit-mysql$'; then "
                     f"    docker run -d --restart unless-stopped --name proveit-mysql -p 3306:3306 -e MYSQL_ROOT_PASSWORD=password -e MYSQL_DATABASE=app mysql:8.0 2>/dev/null || true; "
                     f"  fi; "
                     f"fi; "
-                    f"if grep -qiE 'mongodb|mongo|27017' /home/ubuntu/apps/{q_repo}/.env; then "
+                    f"if grep -qiE 'mongodb|mongo|27017' {base_apps}/{q_repo}/.env; then "
                     f"  if ! docker ps --format '{{{{.Names}}}}' | grep -q '^proveit-mongo$'; then "
                     f"    docker run -d --restart unless-stopped --name proveit-mongo -p 27017:27017 mongo:6-jammy 2>/dev/null || true; "
                     f"  fi; "
                     f"fi; "
-                    f"if grep -qiE 'redis|6379' /home/ubuntu/apps/{q_repo}/.env; then "
+                    f"if grep -qiE 'redis|6379' {base_apps}/{q_repo}/.env; then "
                     f"  if ! docker ps --format '{{{{.Names}}}}' | grep -q '^proveit-redis$'; then "
                     f"    docker run -d --restart unless-stopped --name proveit-redis -p 6379:6379 redis:alpine 2>/dev/null || true; "
                     f"  fi; "
@@ -628,19 +691,19 @@ docker run -d --restart unless-stopped --name proveit-live-app -p {app_port}:80 
                     # Stop previous container on this port
                     f"docker stop $(docker ps -q --filter publish={port}) 2>/dev/null || true; "
                     f"docker rm -f {q_container} 2>/dev/null || true; "
-                    f"cd /home/ubuntu/apps/{q_repo} && "
+                    f"cd {base_apps}/{q_repo} && "
                     # STACK 1: Docker Compose (Full Stack: Frontend, Backend, Databases)
                     f"if [ -f 'docker-compose.yml' ] || [ -f 'docker-compose.yaml' ] || [ -f 'compose.yml' ] || [ -f 'compose.yaml' ]; then "
                     f"  COMPOSE_FILE=$(ls docker-compose.yml docker-compose.yaml compose.yml compose.yaml 2>/dev/null | head -1); "
-                    f"  docker compose -f \"$COMPOSE_FILE\" --env-file /home/ubuntu/apps/{q_repo}/.env down 2>/dev/null || true; "
-                    f"  docker compose -f \"$COMPOSE_FILE\" --env-file /home/ubuntu/apps/{q_repo}/.env up -d --build; "
+                    f"  docker compose -f \"$COMPOSE_FILE\" --env-file {base_apps}/{q_repo}/.env down 2>/dev/null || true; "
+                    f"  docker compose -f \"$COMPOSE_FILE\" --env-file {base_apps}/{q_repo}/.env up -d --build; "
                     # STACK 2: Dockerfile
                     f"elif [ -f 'Dockerfile' ] || [ -f 'dockerfile' ] || [ -f 'Dockerfile.prod' ]; then "
                     f"  DFILE=$(ls Dockerfile dockerfile Dockerfile.prod 2>/dev/null | head -1); "
-                    f"  docker build -t {q_container} -f \"$DFILE\" . && docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} --env-file /home/ubuntu/apps/{q_repo}/.env {q_container}; "
+                    f"  docker build -t {q_container} -f \"$DFILE\" . && docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} --env-file {base_apps}/{q_repo}/.env {q_container}; "
                     # STACK 3: Node.js / TypeScript / React / Next.js / Vue / Angular / Express / NestJS
                     f"elif [ -f 'package.json' ]; then "
-                    f"  docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} -v /home/ubuntu/apps/{q_repo}:/app -w /app --env-file /home/ubuntu/apps/{q_repo}/.env node:20-slim sh -c '"
+                    f"  docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} -v {base_apps}/{q_repo}:/app -w /app --env-file {base_apps}/{q_repo}/.env node:20-slim sh -c '"
                     f"    npm install --prefer-offline 2>/dev/null || npm install; "
                     f"    if grep -q \'\"next\"\' package.json 2>/dev/null || [ -f 'next.config.js' ] || [ -f 'next.config.mjs' ]; then "
                     f"      npm run build 2>/dev/null || true; "
@@ -657,7 +720,7 @@ docker run -d --restart unless-stopped --name proveit-live-app -p {app_port}:80 
                     f"    fi'; "
                     # STACK 4: Python Full Stack (Django, FastAPI, Flask, Streamlit)
                     f"elif [ -f 'manage.py' ] || [ -f 'requirements.txt' ] || [ -f 'pyproject.toml' ] || [ -f 'Pipfile' ]; then "
-                    f"  docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} -v /home/ubuntu/apps/{q_repo}:/app -w /app --env-file /home/ubuntu/apps/{q_repo}/.env python:3.11-slim sh -c '"
+                    f"  docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} -v {base_apps}/{q_repo}:/app -w /app --env-file {base_apps}/{q_repo}/.env python:3.11-slim sh -c '"
                     f"    if [ -f \'requirements.txt\' ]; then pip install --no-cache-dir -r requirements.txt 2>/dev/null || true; fi; "
                     f"    if [ -f \'manage.py\' ]; then "
                     f"      pip install --no-cache-dir django psycopg2-binary 2>/dev/null || true; "
@@ -679,23 +742,23 @@ docker run -d --restart unless-stopped --name proveit-live-app -p {app_port}:80 
                     f"    fi'; "
                     # STACK 5: Java / Spring Boot (Maven / Gradle)
                     f"elif [ -f 'pom.xml' ]; then "
-                    f"  docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} -v /home/ubuntu/apps/{q_repo}:/app -w /app --env-file /home/ubuntu/apps/{q_repo}/.env maven:3.9-eclipse-temurin-17-alpine sh -c '"
+                    f"  docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} -v {base_apps}/{q_repo}:/app -w /app --env-file {base_apps}/{q_repo}/.env maven:3.9-eclipse-temurin-17-alpine sh -c '"
                     f"    mvn clean package -DskipTests -q && java -Dserver.port={internal_port} -jar target/*.jar'; "
                     f"elif [ -f 'build.gradle' ] || [ -f 'gradlew' ]; then "
-                    f"  docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} -v /home/ubuntu/apps/{q_repo}:/app -w /app --env-file /home/ubuntu/apps/{q_repo}/.env gradle:8-jdk17-alpine sh -c '"
+                    f"  docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} -v {base_apps}/{q_repo}:/app -w /app --env-file {base_apps}/{q_repo}/.env gradle:8-jdk17-alpine sh -c '"
                     f"    gradle build -x test && java -Dserver.port={internal_port} -jar build/libs/*.jar'; "
                     # STACK 6: Go (Golang)
                     f"elif [ -f 'go.mod' ] || [ -f 'main.go' ]; then "
-                    f"  docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} -v /home/ubuntu/apps/{q_repo}:/app -w /app --env-file /home/ubuntu/apps/{q_repo}/.env golang:1.22-alpine sh -c '"
+                    f"  docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} -v {base_apps}/{q_repo}:/app -w /app --env-file {base_apps}/{q_repo}/.env golang:1.22-alpine sh -c '"
                     f"    go build -o /app/server . 2>/dev/null || go build -o /app/server ./cmd/... 2>/dev/null || go build -o /app/server main.go; "
                     f"    /app/server'; "
                     # STACK 7: Rust
                     f"elif [ -f 'Cargo.toml' ]; then "
-                    f"  docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} -v /home/ubuntu/apps/{q_repo}:/app -w /app --env-file /home/ubuntu/apps/{q_repo}/.env rust:1.77-slim sh -c '"
+                    f"  docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} -v {base_apps}/{q_repo}:/app -w /app --env-file {base_apps}/{q_repo}/.env rust:1.77-slim sh -c '"
                     f"    cargo run --release -- --port {internal_port} 2>/dev/null || cargo run --release'; "
                     # STACK 8: PHP / Laravel
                     f"elif [ -f 'composer.json' ] || [ -f 'artisan' ] || [ -f 'index.php' ]; then "
-                    f"  docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} -v /home/ubuntu/apps/{q_repo}:/var/www/html -w /var/www/html --env-file /home/ubuntu/apps/{q_repo}/.env php:8.2-apache sh -c '"
+                    f"  docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} -v {base_apps}/{q_repo}:/var/www/html -w /var/www/html --env-file {base_apps}/{q_repo}/.env php:8.2-apache sh -c '"
                     f"    if [ -f \'artisan\' ]; then "
                     f"      composer install --no-dev 2>/dev/null || true; php artisan migrate --force 2>/dev/null || true; php -S 0.0.0.0:{internal_port} -t public; "
                     f"    elif [ -f \'composer.json\' ]; then "
@@ -705,28 +768,28 @@ docker run -d --restart unless-stopped --name proveit-live-app -p {app_port}:80 
                     f"    fi'; "
                     # STACK 9: Ruby on Rails / Sinatra
                     f"elif [ -f 'Gemfile' ]; then "
-                    f"  docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} -v /home/ubuntu/apps/{q_repo}:/app -w /app --env-file /home/ubuntu/apps/{q_repo}/.env ruby:3.2-slim sh -c '"
+                    f"  docker run -d --restart unless-stopped --name {q_container} --add-host host.docker.internal:host-gateway -p {port}:{internal_port} -v {base_apps}/{q_repo}:/app -w /app --env-file {base_apps}/{q_repo}/.env ruby:3.2-slim sh -c '"
                     f"    bundle install 2>/dev/null || true; "
                     f"    bundle exec rails s -b 0.0.0.0 -p {internal_port} 2>/dev/null || bundle exec ruby app.rb -p {internal_port} 2>/dev/null || ruby main.rb'; "
                     # STACK 10: Static HTML / Single Page Applications (CSS / Vanilla JS / Canvas / WebGL)
                     f"else "
-                    f"  HTML_DIR='/home/ubuntu/apps/{q_repo}'; "
-                    f"  if [ -f \"/home/ubuntu/apps/{q_repo}/index.html\" ] || [ -f \"/home/ubuntu/apps/{q_repo}/index.htm\" ]; then HTML_DIR='/home/ubuntu/apps/{q_repo}'; "
-                    f"  elif [ -f \"/home/ubuntu/apps/{q_repo}/public/index.html\" ]; then HTML_DIR='/home/ubuntu/apps/{q_repo}/public'; "
-                    f"  elif [ -f \"/home/ubuntu/apps/{q_repo}/dist/index.html\" ]; then HTML_DIR='/home/ubuntu/apps/{q_repo}/dist'; "
-                    f"  elif [ -f \"/home/ubuntu/apps/{q_repo}/build/index.html\" ]; then HTML_DIR='/home/ubuntu/apps/{q_repo}/build'; "
-                    f"  elif [ -f \"/home/ubuntu/apps/{q_repo}/src/index.html\" ]; then HTML_DIR='/home/ubuntu/apps/{q_repo}/src'; "
+                    f"  HTML_DIR='{base_apps}/{q_repo}'; "
+                    f"  if [ -f \"{base_apps}/{q_repo}/index.html\" ] || [ -f \"{base_apps}/{q_repo}/index.htm\" ]; then HTML_DIR='{base_apps}/{q_repo}'; "
+                    f"  elif [ -f \"{base_apps}/{q_repo}/public/index.html\" ]; then HTML_DIR='{base_apps}/{q_repo}/public'; "
+                    f"  elif [ -f \"{base_apps}/{q_repo}/dist/index.html\" ]; then HTML_DIR='{base_apps}/{q_repo}/dist'; "
+                    f"  elif [ -f \"{base_apps}/{q_repo}/build/index.html\" ]; then HTML_DIR='{base_apps}/{q_repo}/build'; "
+                    f"  elif [ -f \"{base_apps}/{q_repo}/src/index.html\" ]; then HTML_DIR='{base_apps}/{q_repo}/src'; "
                     f"  else "
-                    f"    FIRST_HTML=$(find '/home/ubuntu/apps/{q_repo}' -maxdepth 2 -name '*.html' 2>/dev/null | head -n 1); "
+                    f"    FIRST_HTML=$(find '{base_apps}/{q_repo}' -maxdepth 2 -name '*.html' 2>/dev/null | head -n 1); "
                     f"    if [ -n \"$FIRST_HTML\" ]; then HTML_DIR=$(dirname \"$FIRST_HTML\"); cp \"$FIRST_HTML\" \"$HTML_DIR/index.html\" 2>/dev/null || true; fi; "
                     f"  fi; "
                     f"  if [ ! -f \"$HTML_DIR/index.html\" ] && [ ! -f \"$HTML_DIR/index.htm\" ]; then "
-                    f"    cat << 'HTMLEOF' > /home/ubuntu/apps/{q_repo}/index.html\n"
+                    f"    cat << 'HTMLEOF' > {base_apps}/{q_repo}/index.html\n"
                     f"<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>{repo_clean} - Live App</title><link rel='preconnect' href='https://fonts.googleapis.com'><link rel='preconnect' href='https://fonts.gstatic.com' crossorigin><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap' rel='stylesheet'><style>* {{ box-sizing: border-box; margin: 0; padding: 0; }} body {{ font-family: 'Plus Jakarta Sans', sans-serif; background: #090d16; color: #f1f5f9; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; position: relative; overflow-x: hidden; }} .glow {{ position: absolute; width: 500px; height: 500px; background: radial-gradient(circle, rgba(249, 115, 22, 0.15) 0%, rgba(249, 115, 22, 0) 70%); top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 0; }} .card {{ position: relative; z-index: 1; max-width: 540px; width: 100%; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 20px; padding: 36px 32px; backdrop-filter: blur(16px); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(249, 115, 22, 0.2); text-align: center; }} .badge {{ display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); color: #4ade80; border-radius: 9999px; font-size: 12px; font-weight: 700; text-transform: uppercase; margin-bottom: 20px; }} .pulse {{ width: 8px; height: 8px; border-radius: 50%; background: #22c55e; }} h1 {{ font-size: 26px; font-weight: 800; margin-bottom: 10px; background: linear-gradient(135deg, #ffffff 30%, #f97316 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }} p {{ color: #94a3b8; font-size: 14px; line-height: 1.6; margin-bottom: 24px; }} .meta-box {{ background: rgba(2, 6, 23, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 16px; text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 12px; margin-bottom: 24px; display: flex; flex-direction: column; gap: 8px; }} .meta-row {{ display: flex; justify-content: space-between; align-items: center; }} .meta-label {{ color: #64748b; }} .meta-val {{ color: #38bdf8; font-weight: 600; }}</style></head><body><div class='glow'></div><div class='card'><div class='badge'><span class='pulse'></span> LIVE & HEALTHY</div><h1>{repo_clean}</h1><p>Autonomous application deployed to AWS EC2 via ProveIt with zero-touch CI/CD pipeline and immutable verification.</p><div class='meta-box'><div class='meta-row'><span class='meta-label'>Target Host:</span><span class='meta-val'>{clean_ip}:{port}</span></div><div class='meta-row'><span class='meta-label'>Web Server:</span><span class='meta-val'>NGINX Alpine</span></div><div class='meta-row'><span class='meta-label'>Health Check:</span><span class='meta-val' style='color:#4ade80;'>HTTP 200 OK (/health)</span></div><div class='meta-row'><span class='meta-label'>Container:</span><span class='meta-val'>{container_safe}</span></div></div></div></body></html>\n"
                     f"HTMLEOF\n"
-                    f"    HTML_DIR='/home/ubuntu/apps/{q_repo}'; "
+                    f"    HTML_DIR='{base_apps}/{q_repo}'; "
                     f"  fi; "
-                    f"  cat << 'NGINXCONF' > /home/ubuntu/apps/{q_repo}/nginx_site.conf\n"
+                    f"  cat << 'NGINXCONF' > {base_apps}/{q_repo}/nginx_site.conf\n"
                     f"server {{\n"
                     f"    listen 80;\n"
                     f"    server_name _;\n"
@@ -743,12 +806,12 @@ docker run -d --restart unless-stopped --name proveit-live-app -p {app_port}:80 
                     f"    }}\n"
                     f"}}\n"
                     f"NGINXCONF\n"
-                    f"  chmod -R 755 /home/ubuntu/apps/{q_repo}; "
-                    f"  docker run -d --restart unless-stopped --name {q_container} -p {port}:80 -v /home/ubuntu/apps/{q_repo}/nginx_site.conf:/etc/nginx/conf.d/default.conf:ro -v \"$HTML_DIR\":/usr/share/nginx/html:ro nginx:alpine; "
+                    f"  chmod -R 755 {base_apps}/{q_repo}; "
+                    f"  docker run -d --restart unless-stopped --name {q_container} -p {port}:80 -v {base_apps}/{q_repo}/nginx_site.conf:/etc/nginx/conf.d/default.conf:ro -v \"$HTML_DIR\":/usr/share/nginx/html:ro nginx:alpine; "
                     f"fi"
                 )
                 ssh_res = subprocess.run(
-                    ["ssh", "-i", keys_path, "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5", f"ubuntu@{clean_ip}", remote_script],
+                    ["ssh", "-i", keys_path, "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5", f"{ssh_user}@{clean_ip}", remote_script],
                     capture_output=True,
                     text=True,
                     timeout=180,
@@ -848,8 +911,9 @@ docker run -d --restart unless-stopped --name proveit-live-app -p {app_port}:80 
         if os.path.exists(keys_path) and clean_ip and re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", clean_ip):
             try:
                 import subprocess
+                ssh_user = self.ensure_ssh_access("", clean_ip)
                 ssh_probe = subprocess.run(
-                    ["ssh", "-n", "-i", keys_path, "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=4", f"ubuntu@{clean_ip}", f"curl -s -o /dev/null -w '%{{http_code}}' http://localhost:{port}/health || curl -s -o /dev/null -w '%{{http_code}}' http://localhost:{port}/ || true"],
+                    ["ssh", "-n", "-i", keys_path, "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=4", f"{ssh_user}@{clean_ip}", f"curl -s -o /dev/null -w '%{{http_code}}' http://localhost:{port}/health || curl -s -o /dev/null -w '%{{http_code}}' http://localhost:{port}/ || true"],
                     capture_output=True,
                     text=True,
                     timeout=6,
