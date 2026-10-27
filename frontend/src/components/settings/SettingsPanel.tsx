@@ -24,7 +24,12 @@ import {
   Layers,
   Terminal,
   Activity,
+  User,
+  Smartphone,
+  CheckCircle2,
+  ShieldCheck,
 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 interface SettingsPanelProps {
   theme: "light" | "dark";
@@ -32,13 +37,51 @@ interface SettingsPanelProps {
 }
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme }) => {
-  const [activeTab, setActiveTab] = useState<"safety" | "llm" | "cloud" | "voice" | "proof" | "theme">("safety");
+  const { user, updateProfile } = useAuth();
+  const [activeTab, setActiveTab] = useState<"profile" | "safety" | "llm" | "cloud" | "voice" | "proof" | "theme">("profile");
   const [loading, setLoading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [testResult, setTestResult] = useState<{ status: string; message: string } | null>(null);
   const [testingLLM, setTestingLLM] = useState(false);
   const [pingingWebhook, setPingingWebhook] = useState(false);
   const [webhookStatus, setWebhookStatus] = useState<string | null>(null);
+
+  // User Profile & Mobile Number
+  const [profileName, setProfileName] = useState(user?.name || "");
+  const [profilePhone, setProfilePhone] = useState(user?.phone_number || "+919876543210");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    if (user?.phone_number) {
+      setProfilePhone(user.phone_number);
+      setUserVoicePhone(user.phone_number);
+    }
+    if (user?.name) setProfileName(user.name);
+    if (user?.voice_pin) setVoicePin(user.voice_pin);
+  }, [user]);
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true);
+    setProfileMsg(null);
+    try {
+      const ok = await updateProfile({
+        name: profileName,
+        phone_number: profilePhone,
+      });
+      if (ok) {
+        setUserVoicePhone(profilePhone);
+        setProfileMsg({ type: "success", text: "Profile and Mobile Number updated successfully!" });
+        setTimeout(() => setProfileMsg(null), 4000);
+      } else {
+        setProfileMsg({ type: "error", text: "Failed to update profile. Please verify number format." });
+      }
+    } catch (err: any) {
+      setProfileMsg({ type: "error", text: err.message || "Could not update profile." });
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   // 1. Safety & Blast Radius Gates
   const [blastRadiusStrict, setBlastRadiusStrict] = useState(true);
@@ -252,10 +295,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme })
   };
 
   const tabs = [
+    { id: "profile", label: "User Profile", icon: User, badge: profilePhone ? "LINKED" : "REQUIRED" },
     { id: "safety", label: "Safety & Blast Radius", icon: Shield, badge: "Crucial" },
     { id: "llm", label: "AI Engine & LLM", icon: Bot, badge: llmProvider.toUpperCase() },
     { id: "cloud", label: "Cloud & Fleet", icon: Cloud, badge: cloudMode.toUpperCase() },
-    { id: "voice", label: "VoiceOps & PIN", icon: Phone, badge: "Sarvam AI" },
+    { id: "voice", label: "VoiceOps & Telephony", icon: Phone, badge: "Sarvam AI" },
     { id: "proof", label: "Proof & Webhooks", icon: FileText, badge: "SHA-256" },
     { id: "theme", label: "Appearance", icon: Sun, badge: theme.toUpperCase() },
   ];
@@ -376,6 +420,230 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme, setTheme })
             );
           })}
         </div>
+
+        {/* TAB 0: USER PROFILE & MOBILE NUMBER */}
+        {activeTab === "profile" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* Identity & Account Banner */}
+            <div style={{
+              padding: "24px",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border)",
+              borderRadius: 14,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16, marginBottom: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                  <div style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: "50%",
+                    background: "linear-gradient(135deg, var(--orange), #ea580c)",
+                    color: "#ffffff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 22,
+                    fontWeight: 700,
+                    boxShadow: "0 4px 12px rgba(249, 115, 22, 0.25)"
+                  }}>
+                    {user?.name ? user.name.slice(0, 2).toUpperCase() : user?.username?.slice(0, 2).toUpperCase() || "US"}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-1)", display: "flex", alignItems: "center", gap: 8 }}>
+                      <span>{user?.name || user?.username || "Authenticated Engineer"}</span>
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: "2px 8px",
+                        borderRadius: 99,
+                        background: user?.is_admin ? "rgba(249, 115, 22, 0.12)" : "rgba(34, 197, 94, 0.12)",
+                        color: user?.is_admin ? "var(--orange)" : "#16a34a",
+                        border: `1px solid ${user?.is_admin ? "rgba(249, 115, 22, 0.3)" : "rgba(34, 197, 94, 0.3)"}`,
+                      }}>
+                        {user?.is_admin ? "PLATFORM ADMIN" : "DEVELOPER"}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12.5, color: "var(--text-3)", marginTop: 3 }}>
+                      @{user?.username || "admin"} • {user?.email || "admin@proveit.cloud"}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  background: "var(--bg-card2)",
+                  border: "1px solid var(--border)",
+                  fontSize: 11.5,
+                  color: "var(--text-3)",
+                }}>
+                  Auth Provider: <strong style={{ color: "var(--text-1)" }}>{user?.auth_provider?.toUpperCase() || "EMAIL"}</strong>
+                </div>
+              </div>
+
+              {/* Profile Information Inputs */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-2)", marginBottom: 6 }}>
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={profileName}
+                    onChange={(e) => setProfileName(e.target.value)}
+                    placeholder="Enter your full name"
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: 8,
+                      background: "var(--bg-input)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text-1)",
+                      fontSize: 13,
+                      outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-2)", marginBottom: 6 }}>
+                    Username (System Handle)
+                  </label>
+                  <input
+                    type="text"
+                    disabled
+                    value={user?.username || "admin"}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: 8,
+                      background: "var(--bg-card2)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text-3)",
+                      fontSize: 13,
+                      fontFamily: "JetBrains Mono, monospace",
+                      outline: "none",
+                      boxSizing: "border-box",
+                      cursor: "not-allowed",
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Mobile Number & VoiceOps Telephony Section */}
+              <div style={{
+                padding: "18px 20px",
+                borderRadius: 12,
+                background: "var(--bg-card2)",
+                border: "1px solid var(--orange-border)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-1)", display: "flex", alignItems: "center", gap: 8 }}>
+                      <Smartphone size={16} color="var(--orange)" />
+                      <span>Mobile Number (Sarvam VoiceOps Caller ID)</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 3, maxWidth: 580 }}>
+                      When you dial into the ProveIt Autonomous DevOps Hotline, the Sarvam AI voice agent matches this Caller ID to look up your account.
+                    </div>
+                  </div>
+
+                  <span style={{
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    padding: "3px 10px",
+                    borderRadius: 99,
+                    background: profilePhone ? "rgba(34, 197, 94, 0.12)" : "rgba(239, 68, 68, 0.12)",
+                    color: profilePhone ? "#16a34a" : "#ef4444",
+                    border: `1px solid ${profilePhone ? "rgba(34, 197, 94, 0.3)" : "rgba(239, 68, 68, 0.3)"}`,
+                  }}>
+                    {profilePhone ? "CALLER ID ACTIVE" : "NO MOBILE LINKED"}
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: 240 }}>
+                    <input
+                      type="tel"
+                      value={profilePhone}
+                      onChange={(e) => setProfilePhone(e.target.value)}
+                      placeholder="+91 98765 43210"
+                      style={{
+                        width: "100%",
+                        padding: "10px 14px",
+                        borderRadius: 8,
+                        background: "var(--bg-input)",
+                        border: "1px solid var(--border)",
+                        color: "var(--text-1)",
+                        fontSize: 14,
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontWeight: 600,
+                        outline: "none",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleSaveProfile}
+                    disabled={savingProfile}
+                    style={{
+                      padding: "10px 22px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: "var(--orange)",
+                      color: "#ffffff",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: savingProfile ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 7,
+                      boxShadow: "0 2px 8px rgba(249, 115, 22, 0.25)",
+                    }}
+                  >
+                    {savingProfile ? <RefreshCw size={13} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                    <span>{savingProfile ? "Saving..." : "Save Mobile Number"}</span>
+                  </button>
+                </div>
+
+                {profileMsg && (
+                  <div style={{
+                    padding: "8px 12px",
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 500,
+                    background: profileMsg.type === "success" ? "rgba(34, 197, 94, 0.1)" : "rgba(239, 68, 68, 0.1)",
+                    color: profileMsg.type === "success" ? "#16a34a" : "#ef4444",
+                    border: `1px solid ${profileMsg.type === "success" ? "rgba(34, 197, 94, 0.25)" : "rgba(239, 68, 68, 0.25)"}`,
+                  }}>
+                    {profileMsg.text}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Security Notice Card */}
+            <div style={{
+              padding: "16px 20px",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border)",
+              borderRadius: 14,
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+            }}>
+              <ShieldCheck size={28} color="#16a34a" style={{ flexShrink: 0 }} />
+              <div style={{ fontSize: 12.5, color: "var(--text-3)", lineHeight: 1.5 }}>
+                <strong style={{ color: "var(--text-1)" }}>Two-Tier Voice Authentication:</strong> Incoming calls are matched against your mobile number. The voice agent protects all sensitive repositories and deployment actions behind your 4-digit security PIN configured in the VoiceOps tab.
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* TAB 1: SAFETY & BLAST RADIUS */}
         {activeTab === "safety" && (

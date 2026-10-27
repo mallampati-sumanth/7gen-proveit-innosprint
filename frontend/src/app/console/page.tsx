@@ -97,7 +97,11 @@ function MainApp() {
       setGithubProfile(pData || { connected: false });
 
       if (rData && rData.length > 0) {
-        setSelectedRepo(prev => prev || rData[0].name);
+        // Prioritize repo owned by the logged-in user or connected GitHub account
+        const myUsername = (pData?.username || pData?.login || user?.username || "").toLowerCase();
+        const myRepo = rData.find((r: any) => myUsername && (r.owner || "").toLowerCase() === myUsername);
+        const preferred = myRepo ? myRepo.name : rData[0].name;
+        setSelectedRepo(prev => prev || preferred);
       }
       if (iData && iData.length > 0) {
         const realRunning = iData.find((i: any) => !i.instance_id.startsWith("i-0a8f") && !i.instance_id.startsWith("i-0b7e") && i.state === "running" && i.public_ip && i.public_ip.includes(".") && !i.public_ip.startsWith("None"));
@@ -308,7 +312,9 @@ function MainApp() {
   };
 
   const openInjectForRepo = (repoName: string) => {
-    setSelectedRepo(repoName);
+    if (repoName) {
+      setSelectedRepo(repoName);
+    }
     setView("repoenv");
   };
 
@@ -445,6 +451,7 @@ function MainApp() {
                   bottomRef={bottomRef}
                   setView={setView}
                   onOpenConnect={() => setConnectModalOpen(true)}
+                  onInjectEnv={openInjectForRepo}
                 />
               )}
 

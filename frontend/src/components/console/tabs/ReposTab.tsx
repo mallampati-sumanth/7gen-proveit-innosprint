@@ -21,6 +21,7 @@ export const ReposTab = ({
 }) => {
   const [search, setSearch] = useState("");
   const [langFilter, setLangFilter] = useState("ALL");
+  const [ownerFilter, setOwnerFilter] = useState<"all" | "mine">("all");
   const [showAdd, setShowAdd] = useState(false);
   const [newRepoUrl, setNewRepoUrl] = useState("");
   const [newRepoPort, setNewRepoPort] = useState("3000");
@@ -28,10 +29,14 @@ export const ReposTab = ({
   const [addError, setAddError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
+  const myUsername = (profile?.username || profile?.login || "").toLowerCase();
+
   const filtered = repos.filter(r => {
-    const matchesSearch = r.name.toLowerCase().includes(search.toLowerCase()) || (r.description && r.description.toLowerCase().includes(search.toLowerCase()));
+    const repoIdentifier = (r.name || r.repo_name || "").toLowerCase();
+    const matchesSearch = repoIdentifier.includes(search.toLowerCase()) || (r.description && r.description.toLowerCase().includes(search.toLowerCase()));
     const matchesLang = langFilter === "ALL" || (r.language && r.language.toLowerCase() === langFilter.toLowerCase());
-    return matchesSearch && matchesLang;
+    const matchesOwner = ownerFilter === "all" || (myUsername && (r.owner || "").toLowerCase() === myUsername);
+    return matchesSearch && matchesLang && matchesOwner;
   });
 
   const handleSyncAll = async () => {
@@ -221,7 +226,34 @@ export const ReposTab = ({
           />
         </div>
 
-        <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          {myUsername && (
+            <div style={{ display: "flex", background: "var(--badge-bg)", padding: 2, borderRadius: 8, border: "1px solid var(--border)", marginRight: 6 }}>
+              <button
+                onClick={() => setOwnerFilter("all")}
+                style={{
+                  padding: "4px 10px", borderRadius: 6, border: "none", cursor: "pointer",
+                  fontSize: 11, fontWeight: ownerFilter === "all" ? 700 : 500,
+                  background: ownerFilter === "all" ? "var(--orange)" : "transparent",
+                  color: ownerFilter === "all" ? "#fff" : "var(--text-2)",
+                }}
+              >
+                All Repos
+              </button>
+              <button
+                onClick={() => setOwnerFilter("mine")}
+                style={{
+                  padding: "4px 10px", borderRadius: 6, border: "none", cursor: "pointer",
+                  fontSize: 11, fontWeight: ownerFilter === "mine" ? 700 : 500,
+                  background: ownerFilter === "mine" ? "var(--green)" : "transparent",
+                  color: ownerFilter === "mine" ? "#fff" : "var(--text-2)",
+                }}
+              >
+                My Repos Only
+              </button>
+            </div>
+          )}
+
           {["ALL", "TypeScript", "Python", "JavaScript"].map(l => (
             <button key={l} onClick={() => setLangFilter(l)} style={{
               padding: "5px 12px", borderRadius: 6, border: "1px solid var(--border)",
@@ -283,13 +315,23 @@ export const ReposTab = ({
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                   <a
-                    href={`https://github.com/${r.name}`}
+                    href={r.html_url || `https://github.com/${r.name}`}
                     target="_blank"
                     rel="noreferrer"
-                    style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 14, fontWeight: 700, color: "var(--text-1)", textDecoration: "none", display: "flex", alignItems: "center", gap: 4 }}
+                    style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 14, fontWeight: 700, color: "var(--text-1)", textDecoration: "none", display: "flex", alignItems: "center", gap: 6 }}
                   >
-                    {r.name} <I.ExternalLink />
+                    <span>{r.name || r.repo_name}</span> <I.ExternalLink />
                   </a>
+                  {r.owner && (
+                    <span style={{
+                      fontSize: 10.5, fontWeight: 600, padding: "1px 7px", borderRadius: 4,
+                      background: myUsername && r.owner.toLowerCase() === myUsername ? "var(--green-bg)" : "var(--badge-bg)",
+                      color: myUsername && r.owner.toLowerCase() === myUsername ? "var(--green)" : "var(--text-3)",
+                      border: myUsername && r.owner.toLowerCase() === myUsername ? "1px solid rgba(22,163,74,0.3)" : "1px solid var(--border)",
+                    }}>
+                      {myUsername && r.owner.toLowerCase() === myUsername ? "My Repo" : `@${r.owner}`}
+                    </span>
+                  )}
                   <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: "var(--blue-bg)", color: "var(--blue)" }}>
                     {r.language || "Other"}
                   </span>
@@ -299,7 +341,7 @@ export const ReposTab = ({
                     </span>
                   )}
                   <span style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "JetBrains Mono, monospace" }}>
-                    port: {r.default_port}
+                    port: {r.default_port || (r.language === "Python" ? 8000 : 3000)}
                   </span>
                   {r.default_branch && (
                     <span style={{ fontSize: 11, color: "var(--text-3)", fontFamily: "JetBrains Mono, monospace" }}>

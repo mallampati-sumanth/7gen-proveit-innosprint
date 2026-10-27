@@ -13,6 +13,10 @@ export interface AuthUser {
   avatar_url?: string;
   auth_provider: "email" | "github";
   is_admin: boolean;
+  phone_number?: string;
+  phone_verified?: boolean;
+  voice_pin?: string;
+  voice_enabled?: boolean;
 }
 
 export interface AuthContextType {
@@ -25,6 +29,8 @@ export interface AuthContextType {
   loginWithGitHubToken: (token: string) => Promise<boolean>;
   loginWithGitHubOAuth: () => Promise<void>;
   loginAsDemoAdmin: () => Promise<boolean>;
+  updateProfile: (data: { name?: string; phone_number?: string; voice_pin?: string; voice_enabled?: boolean }) => Promise<boolean>;
+  refreshUser: () => Promise<void>;
   logout: () => void;
   clearError: () => void;
 }
@@ -49,9 +55,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         const storedToken = localStorage.getItem("proveit_token");
+        const storedUser = localStorage.getItem("proveit_user");
         if (!storedToken) {
           setLoading(false);
           return;
+        }
+
+        if (storedUser) {
+          setUser({
+            user_id: "usr_cached",
+            username: storedUser,
+            email: `${storedUser}@proveit.cloud`,
+            auth_provider: "email",
+            is_admin: storedUser === "admin",
+          });
+          setToken(storedToken);
+          setAuthToken(storedToken);
         }
 
         const res = await fetch(`${API_BASE}/api/auth/me`, {
@@ -218,6 +237,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return loginWithEmail("admin", "proveit_demo_secret_2026");
   };
 
+  const refreshUser = async () => {
+    const storedToken = token || (typeof window !== "undefined" ? localStorage.getItem("proveit_token") : null);
+    if (!storedToken) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${storedToken}` },
+      });
+      if (res.ok) {
+        const userData = await res.json();
+        setUser(userData);
+      }
+    } catch {}
+  };
+
+  const updateProfile = async (data: { name?: string; phone_number?: string; voice_pin?: string; voice_enabled?: boolean }): Promise<boolean> => {
+    setError(null);
+    try {
+      const storedToken = token || (typeof window !== "undefined" ? localStorage.getItem("proveit_token") : null);
+      const res = await fetch(`${API_BASE}/api/auth/profile`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(storedToken ? { Authorization: `Bearer ${storedToken}` } : {}),
+        },
+        body: JSON.stringify(data),
+      });
+      const resData = await res.json();
+      if (!res.ok) {
+        throw new Error(resData.detail || "Failed to update profile.");
+      }
+      setUser(resData);
+      return true;
+    } catch (err: any) {
+      setError(err.message || "Failed to update profile.");
+      return false;
+    }
+  };
+
   const logout = () => {
     setUser(null);
     setToken(null);
@@ -240,6 +297,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithGitHubToken,
         loginWithGitHubOAuth,
         loginAsDemoAdmin,
+        updateProfile,
+        refreshUser,
         logout,
         clearError,
       }}
