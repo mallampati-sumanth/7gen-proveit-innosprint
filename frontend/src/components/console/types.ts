@@ -167,6 +167,7 @@ export const PAGE_META: Record<string, { title: string; sub: string; badge: stri
   chat: { title: "AI Cloud Architect", sub: "Autonomous EC2 deployment & verified self-healing agent", badge: "Live Backend" },
   pipeline: { title: "Pipeline Tracker", sub: "Real-time CI/CD execution pipeline, blast radius safety gates & immutable verification", badge: "Real-Time" },
   voice: { title: "VoiceOps Agent", sub: "Autonomous deployment trigger via Sarvam AI cellular voice telephony", badge: "Sarvam AI" },
+  "voice-automation": { title: "Voice Agents Automation", sub: "Real-time task tracker for Sarvam AI telephony deployments, cloud destinations, live URLs & ledger verification", badge: "Live Telemetry" },
   repos: { title: "Code Repositories", sub: "Connected GitHub codebases, branches & manifests", badge: "GitHub API" },
   repoenv: { title: "Environment Studio", sub: "Dynamic per-repository environment variables & secret injection", badge: "Vault Encrypted" },
   ec2: { title: "Compute Fleet", sub: "AWS EC2 instances, SSH pre-flight, and container daemon runtime", badge: "AWS EC2" },

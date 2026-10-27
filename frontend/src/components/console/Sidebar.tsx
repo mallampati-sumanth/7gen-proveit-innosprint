@@ -8,6 +8,7 @@ export const NAV = [
       { id: "chat", icon: <I.Bot />, label: "AI Cloud Architect", badge: "Live SSE" },
       { id: "pipeline", icon: <I.Activity />, label: "Pipeline Tracker", badge: "Live Flow" },
       { id: "voice", icon: <I.Phone />, label: "VoiceOps Agent", badge: "Voice" },
+      { id: "voice-automation", icon: <I.Zap />, label: "Voice Agents Automation", badge: "Live Tasks" },
       { id: "repos", icon: <I.Github />, label: "Code Repositories" },
       { id: "repoenv", icon: <I.Sliders />, label: "Environment Studio", badge: "Per-Repo" },
       { id: "ec2", icon: <I.Server />, label: "Compute Fleet", badge: "EC2" },

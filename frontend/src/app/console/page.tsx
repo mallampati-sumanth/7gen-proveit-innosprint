@@ -37,6 +37,7 @@ import { RepoAnalyzerTab } from "@/components/console/tabs/RepoAnalyzerTab";
 import { ActivityTab } from "@/components/console/tabs/ActivityTab";
 import { LogsTab } from "@/components/console/tabs/LogsTab";
 import { VoiceOpsTab } from "@/components/console/tabs/VoiceOpsTab";
+import { VoiceAutomationTab } from "@/components/console/tabs/VoiceAutomationTab";
 import { PipelineTrackerTab, PipelineState } from "@/components/console/tabs/PipelineTrackerTab";
 
 /* ─────────── WELCOME AGENT MESSAGE ─────────── */
@@ -1032,6 +1033,10 @@ function MainApp() {
 
               {view === "voice" && (
                 <VoiceOpsTab currentUser={user.username} repos={repos} onDeployFromVoice={openDeployForRepo} />
+              )}
+
+              {view === "voice-automation" && (
+                <VoiceAutomationTab currentUser={user.username} repos={repos} />
               )}
 
               {view === "settings" && <SettingsPanel theme={theme} setTheme={setTheme} />}
