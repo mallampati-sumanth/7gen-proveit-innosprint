@@ -219,8 +219,11 @@ Your diagnostic capabilities:
                 ec2_ip = real_inst["public_ip"]
             else:
                 ec2_ip = active_insts[0]["public_ip"] if active_insts else "54.158.24.184"
-
-        ec2_id = str(ec2_target).split(" ")[0] if " " in str(ec2_target) else str(ec2_target)
+        id_match = re.search(r"i-[0-9a-fA-F]{8,}", str(ec2_target))
+        if id_match:
+            ec2_id = id_match.group(0)
+        else:
+            ec2_id = str(ec2_target).split(" ")[0] if " " in str(ec2_target) else str(ec2_target)
 
         # Shared deployment context
         gh_token = getattr(self.github, "token", "") or os.environ.get("GITHUB_TOKEN", "")
