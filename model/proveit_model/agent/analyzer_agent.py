@@ -67,6 +67,14 @@ Please return the JSON object conforming to your instructions."""
             text = text.strip()
 
             parsed = json.loads(text)
+            resolved_port = int(parsed.get("port") or raw_manifest.get("port") or 8000)
+            rec_env = parsed.get("recommended_env") or raw_manifest.get("recommended_env", "")
+            if "PORT=" in rec_env:
+                import re
+                rec_env = re.sub(r"PORT=\d+", f"PORT={resolved_port}", rec_env)
+            else:
+                rec_env = f"PORT={resolved_port}\n" + rec_env
+
             # Merge with raw manifest so no verified GitHub data is lost
             return {
                 **raw_manifest,
@@ -74,12 +82,12 @@ Please return the JSON object conforming to your instructions."""
                 "agent_summary": parsed.get("summary", ""),
                 "framework": parsed.get("framework") or raw_manifest.get("framework"),
                 "runtime": parsed.get("runtime") or raw_manifest.get("runtime"),
-                "port": parsed.get("port") or raw_manifest.get("port"),
+                "port": resolved_port,
                 "health_endpoint": parsed.get("healthcheck_path") or raw_manifest.get("health_endpoint", "/health"),
                 "readiness_score": parsed.get("readiness_score", 92),
                 "security_audit": parsed.get("security_audit", "Environment configuration verified for blast radius gates."),
                 "recommended_dockerfile": parsed.get("recommended_dockerfile", raw_manifest.get("dockerfile_base", "")),
-                "recommended_env": parsed.get("recommended_env") or raw_manifest.get("recommended_env", ""),
+                "recommended_env": rec_env,
             }
         except Exception as e:
             logger.warning(f"Agentic LLM repo analysis error: {e}. Utilizing deterministic manifest.")

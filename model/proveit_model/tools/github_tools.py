@@ -40,6 +40,7 @@ class GitHubTools:
                     return {
                         "connected": True,
                         "login": data.get("login"),
+                        "username": data.get("login"),
                         "name": data.get("name") or data.get("login"),
                         "avatar_url": data.get("avatar_url"),
                         "html_url": data.get("html_url"),

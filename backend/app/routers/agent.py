@@ -466,14 +466,22 @@ def save_repository_env(
 
 @router.post("/repos/{repo_id:path}/env/generate")
 def generate_recommended_repo_env(repo_id: str):
-    """Auto-detect stack and generate tailored deployment .env file for repo."""
+    """Auto-detect stack and generate tailored deployment .env file for repo with synchronized port."""
     repo_clean = repo_id.strip("/")
     manifest = github_tools.inspect_repository(repo_clean)
+    port = manifest.get("port", 3000)
+    rec_env = manifest.get("recommended_env", "")
+    if "PORT=" in rec_env:
+        import re
+        rec_env = re.sub(r"PORT=\d+", f"PORT={port}", rec_env)
+    else:
+        rec_env = f"PORT={port}\n" + rec_env
+
     return {
         "repo_id": repo_clean,
-        "recommended_env": manifest.get("recommended_env", ""),
+        "recommended_env": rec_env,
         "framework": manifest.get("framework", "Node.js"),
-        "port": manifest.get("port", 3000),
+        "port": port,
     }
 
 
@@ -551,6 +559,21 @@ def list_ec2_instances(sync: bool = False, session: Session = Depends(get_sessio
 
     instances = session.exec(select(EC2Instance).order_by(EC2Instance.id.asc())).all()
     active_instances = [i for i in instances if i.state != "terminated"]
+
+    def sort_key(inst):
+        is_mock = inst.instance_id.startswith("i-0a8f") or inst.instance_id.startswith("i-0b7e")
+        is_running = inst.state.lower() == "running"
+        has_ip = bool(inst.public_ip and "." in inst.public_ip and not inst.public_ip.startswith("None"))
+        if not is_mock and is_running and has_ip:
+            return (0, -inst.id)
+        elif not is_mock and is_running:
+            return (1, -inst.id)
+        elif not is_mock:
+            return (2, -inst.id)
+        else:
+            return (3, inst.id)
+
+    active_instances.sort(key=sort_key)
 
     return [
         {
@@ -671,25 +694,32 @@ async def stream_ec2_provision(job_id: str, session: Session = Depends(get_sessi
         yield f"data: {json.dumps({'stage': 4, 'status': 'RUNNING', 'title': 'SSH Key & Docker Cloud-Init Bootstrap', 'log': f'Injected in-memory deploy SSH key. Cloud-init executing Docker v26.1 installation on {public_ip}:22...'})}\n\n"
         await asyncio.sleep(0.6)
 
-        # Save to database
-        db_inst = EC2Instance(
-            instance_id=inst_id,
-            name=job["name"],
-            public_ip=public_ip,
-            private_ip=res.get("private_ip", "10.0.1.42"),
-            region=job["region"],
-            instance_type=job["instance_type"],
-            state="running",
-            ssh_user="ubuntu",
-            auth_method="deploy_key",
-            docker_installed=True,
-            docker_version="Docker v26.1.4, compose v2.27.0",
-            deployed_containers_count=0,
-            deployed_apps_json="[]",
-            last_ping_status="HEALTHY",
-            last_ping_latency_ms=17.2,
-        )
-        session.add(db_inst)
+        # Save or update database
+        existing = session.exec(select(EC2Instance).where(EC2Instance.instance_id == inst_id)).first()
+        if existing:
+            existing.name = job["name"]
+            existing.public_ip = public_ip
+            existing.state = "running"
+            db_inst = existing
+        else:
+            db_inst = EC2Instance(
+                instance_id=inst_id,
+                name=job["name"],
+                public_ip=public_ip,
+                private_ip=res.get("private_ip", "10.0.1.42"),
+                region=job["region"],
+                instance_type=job["instance_type"],
+                state="running",
+                ssh_user="ubuntu",
+                auth_method="deploy_key",
+                docker_installed=True,
+                docker_version="Docker v26.1.4, compose v2.27.0",
+                deployed_containers_count=0,
+                deployed_apps_json="[]",
+                last_ping_status="HEALTHY",
+                last_ping_latency_ms=17.2,
+            )
+            session.add(db_inst)
         session.commit()
         session.refresh(db_inst)
 
@@ -946,8 +976,23 @@ def start_deployment(req: DeployRequest, session: Session = Depends(get_session)
         session.refresh(db_inst)
         target_ec2 = f"{db_inst.instance_id} ({db_inst.public_ip})"
     elif not target_ec2:
-        first_ec2 = session.exec(select(EC2Instance)).first()
-        target_ec2 = f"{first_ec2.instance_id} ({first_ec2.public_ip})" if first_ec2 else "EC2-Target"
+        all_ec2 = session.exec(select(EC2Instance)).all()
+        real_running = next((i for i in all_ec2 if not i.instance_id.startswith("i-0a8f") and not i.instance_id.startswith("i-0b7e") and i.state == "running" and "." in (i.public_ip or "")), None)
+        chosen = real_running or (all_ec2[0] if all_ec2 else None)
+        target_ec2 = f"{chosen.instance_id} ({chosen.public_ip})" if chosen else "EC2-Target"
+    else:
+        clean_id = target_ec2.split(" ")[0].strip()
+        matched = session.exec(select(EC2Instance).where(EC2Instance.instance_id == clean_id)).first()
+        if matched and matched.public_ip and "." in matched.public_ip and not matched.public_ip.startswith("None"):
+            target_ec2 = f"{matched.instance_id} ({matched.public_ip})"
+        else:
+            # If target instance is stopped or missing public IP, route to active running instance
+            all_ec2 = session.exec(select(EC2Instance)).all()
+            real_running = next((i for i in all_ec2 if not i.instance_id.startswith("i-0a8f") and not i.instance_id.startswith("i-0b7e") and i.state == "running" and "." in (i.public_ip or "") and not (i.public_ip or "").startswith("None")), None)
+            if real_running:
+                target_ec2 = f"{real_running.instance_id} ({real_running.public_ip})"
+            elif matched:
+                target_ec2 = f"{matched.instance_id} ({matched.public_ip})"
 
     # Resolve repo envs if not provided directly
     injected = req.injected_env or {}

@@ -43,8 +43,9 @@ class OpenAIProvider(BaseLLMProvider):
         tools: Optional[List[ToolDefinition]] = None,
         system_instruction: Optional[str] = None,
     ) -> AgentMessage:
-        if self.client:
+        if self.api_key and not self.api_key.startswith("your_") and len(self.api_key) > 5:
             try:
+                import httpx
                 formatted_msgs = []
                 if system_instruction:
                     formatted_msgs.append({"role": "system", "content": system_instruction})
@@ -67,10 +68,10 @@ class OpenAIProvider(BaseLLMProvider):
                         ]
                     formatted_msgs.append(msg_dict)
 
-                kwargs: Dict[str, Any] = {
+                payload: Dict[str, Any] = {
                     "model": self.model_name,
                     "messages": formatted_msgs,
-                    "max_tokens": 800,
+                    "max_tokens": 500,
                 }
 
                 if tools:
@@ -84,34 +85,44 @@ class OpenAIProvider(BaseLLMProvider):
                                 "parameters": t.parameters,
                             }
                         })
-                    kwargs["tools"] = openai_tools
-                    kwargs["tool_choice"] = "auto"
+                    payload["tools"] = openai_tools
+                    payload["tool_choice"] = "auto"
 
-                resp = await asyncio.to_thread(self.client.chat.completions.create, **kwargs)
-                choice = resp.choices[0].message
+                url = f"{self.base_url.rstrip('/')}/chat/completions" if self.base_url else "https://api.openai.com/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "ProveIt-Agent/1.0",
+                }
 
-                tool_calls = None
-                if choice.tool_calls:
-                    tool_calls = []
-                    for tc in choice.tool_calls:
-                        args = {}
-                        try:
-                            args = json.loads(tc.function.arguments)
-                        except Exception:
-                            args = {"raw": tc.function.arguments}
-                        tool_calls.append(ToolCall(
-                            id=tc.id,
-                            name=tc.function.name,
-                            arguments=args,
-                        ))
-
-                return AgentMessage(
-                    role="assistant",
-                    content=choice.content or "",
-                    tool_calls=tool_calls,
-                )
+                async with httpx.AsyncClient(timeout=25.0) as http_client:
+                    http_resp = await http_client.post(url, headers=headers, json=payload)
+                    if http_resp.status_code == 200:
+                        data = http_resp.json()
+                        choice = data["choices"][0]["message"]
+                        tool_calls = None
+                        if choice.get("tool_calls"):
+                            tool_calls = []
+                            for tc in choice["tool_calls"]:
+                                args = {}
+                                try:
+                                    args = json.loads(tc["function"]["arguments"])
+                                except Exception:
+                                    args = {"raw": tc["function"]["arguments"]}
+                                tool_calls.append(ToolCall(
+                                    id=tc["id"],
+                                    name=tc["function"]["name"],
+                                    arguments=args,
+                                ))
+                        return AgentMessage(
+                            role="assistant",
+                            content=choice.get("content") or "",
+                            tool_calls=tool_calls,
+                        )
+                    else:
+                        logger.warning(f"OpenAI/Groq API error ({http_resp.status_code}): {http_resp.text}")
             except Exception as e:
-                logger.error(f"OpenAI API invocation error: {e}")
+                logger.error(f"OpenAI/Groq API invocation error: {e}")
 
         # Fallback to intelligent reasoning if client not active or rate-limited
         latest = messages[-1].content if messages else ""

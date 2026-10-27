@@ -56,3 +56,6 @@ Thumbs.db
 
 #coding agent artifacts
 .opencode/
+.playwright-mcp/
+backend/keys/*.pem
+backend/keys/*.pub

@@ -434,7 +434,34 @@ const Bubble = ({ msg }: { msg: Message }) => {
             </div>
           )}
           {msg.text}
-          {msg.appUrl && (
+          {msg.proofHash && (
+            <div style={{
+              marginTop: 14, padding: "14px 18px", borderRadius: 12,
+              background: "rgba(22, 163, 74, 0.08)", border: "1px solid rgba(22, 163, 74, 0.3)",
+              display: "flex", flexDirection: "column", gap: 10,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--green)", display: "flex", alignItems: "center", gap: 6 }}>
+                  <I.Check /> Autonomous Deployment Verified & Sealed
+                </span>
+                <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, background: "rgba(22,163,74,0.15)", color: "#16a34a", padding: "3px 8px", borderRadius: 4, fontWeight: 700 }}>
+                  Proof #{msg.proofHash}
+                </span>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-2)", lineHeight: 1.5 }}>
+                Deterministic safety gates passed. Container deployed on EC2 host. Live HTTP 200 OK health check verified. Signed SHA-256 proof committed to tamper-evident ledger.
+              </div>
+              {msg.appUrl && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--bg-card)", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)" }}>
+                  <span style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 600 }}>Active Endpoint:</span>
+                  <a href={msg.appUrl} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 700, color: "var(--orange)", display: "flex", alignItems: "center", gap: 5, textDecoration: "none" }}>
+                    {msg.appUrl} <I.ExternalLink />
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+          {!msg.proofHash && msg.appUrl && (
             <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 8, background: "var(--bg-card2)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 12, color: "var(--green)", fontWeight: 600 }}>Active on EC2:</span>
               <a href={msg.appUrl} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--orange)", fontSize: 12.5, fontWeight: 700, textDecoration: "none" }}>
@@ -1369,12 +1396,14 @@ const RepoEnvInjector = ({
   setSelectedRepo,
   activeTarget,
   setActiveTarget,
+  onDeployRepo,
 }: {
   repos: RepoItem[];
   selectedRepo: string;
   setSelectedRepo: (r: string) => void;
   activeTarget: EnvTarget;
   setActiveTarget: (t: EnvTarget) => void;
+  onDeployRepo?: (repo: string) => void;
 }) => {
   const [mode, setMode] = useState<"table" | "raw">("table");
   const [vars, setVars] = useState<RepoEnvVariable[]>([]);
@@ -1437,7 +1466,7 @@ const RepoEnvInjector = ({
         body: JSON.stringify(payload),
       });
       setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 2500);
+      setTimeout(() => setSavedSuccess(false), 8000);
       loadEnv();
     } catch { }
     setSaving(false);
@@ -1520,10 +1549,36 @@ const RepoEnvInjector = ({
             border: "none", background: savedSuccess ? "var(--green)" : "var(--orange)", color: "#fff",
             fontSize: 12.5, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer",
           }}>
-            {savedSuccess ? <><I.Check /> Saved & Synced to EC2</> : saving ? "Saving…" : "Save .env for Repo"}
+            {savedSuccess ? <><I.Check /> Injected Successfully</> : saving ? "Saving…" : "Save & Inject .env"}
           </button>
         </div>
       </div>
+
+      {/* Success & Recommended Next Step Banner */}
+      {savedSuccess && (
+        <div style={{
+          marginBottom: 16, padding: "14px 18px", borderRadius: 10,
+          background: "rgba(22, 163, 74, 0.08)", border: "1px solid rgba(22, 163, 74, 0.3)",
+          display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12,
+        }}>
+          <div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--green)", display: "flex", alignItems: "center", gap: 6 }}>
+              <I.Check /> Environment Variables Successfully Injected for {selectedRepo} ({activeTarget})!
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-2)", marginTop: 2 }}>
+              Configuration encrypted and ready for container injection. Recommended Next Step: Launch autonomous deployment to your EC2 fleet.
+            </div>
+          </div>
+          {onDeployRepo && (
+            <button onClick={() => onDeployRepo(selectedRepo)} style={{
+              padding: "8px 18px", borderRadius: 8, border: "none", background: "var(--orange)", color: "#fff",
+              fontSize: 12.5, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
+            }}>
+              <I.Play /> Deploy {selectedRepo.split("/").pop()} to EC2 ➔
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Mode Switcher */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
@@ -2063,7 +2118,7 @@ const SecretsPanel = ({ profile, onOpenConnect }: { profile?: any; onOpenConnect
         <div style={{ padding: 20 }}>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 4 }}>Connected Account</div>
           <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: profile?.connected ? "var(--green)" : "var(--yellow)", fontWeight: 700, marginBottom: 14 }}>
-            {profile?.connected ? `@${profile.username} (${profile.name || "Authenticated"})` : "Not connected - No token active"}
+            {profile?.connected ? `@${profile.username || profile.login} (${profile.name || "Authenticated"})` : "Not connected - No token active"}
           </div>
           {testResult["github"] && (
             <div style={{ padding: "8px 12px", borderRadius: 6, background: testing["github"] === "ok" ? "var(--green-bg)" : "var(--red-bg)", color: testing["github"] === "ok" ? "var(--green)" : "var(--red)", fontSize: 12, fontFamily: "JetBrains Mono, monospace" }}>
@@ -2348,7 +2403,7 @@ const RepoAnalyzerPanel = ({
                 <button onClick={() => onProvisionRecommendedEC2({
                   name: `Host-${result.repository.split("/").pop()}`,
                   target_repo: result.repository,
-                  app_port: result.exposed_port || 5000,
+                  app_port: result.port || 5000,
                   framework: result.framework || "Web Framework",
                   instance_type: "t3.micro",
                   region: "us-east-1",
@@ -3249,7 +3304,7 @@ const Header = ({ view, setView, theme, setTheme, onDeployClick, profile, onOpen
           fontSize: 12, fontWeight: 400, cursor: "pointer", transition: "all .15s",
         }}>
           <I.Github />
-          <span>{profile?.connected ? `@${profile.username}` : "GitHub"}</span>
+          <span>{profile?.connected ? `@${profile.username || profile.login}` : "GitHub"}</span>
           <div style={{ width: 6, height: 6, borderRadius: "50%", background: profile?.connected ? "var(--green)" : "var(--yellow)" }} />
         </button>
 
@@ -3354,14 +3409,34 @@ function MainApp() {
       setInstances(iData || []);
       setGithubProfile(pData || { connected: false });
 
-      if (rData?.[0]?.name && !selectedRepo) setSelectedRepo(rData[0].name);
-      if (iData?.[0]?.instance_id && !selectedInstance) setSelectedInstance(iData[0].instance_id);
+      if (rData && rData.length > 0) {
+        setSelectedRepo(prev => prev || rData[0].name);
+      }
+      if (iData && iData.length > 0) {
+        const realRunning = iData.find((i: any) => !i.instance_id.startsWith("i-0a8f") && !i.instance_id.startsWith("i-0b7e") && i.state === "running" && i.public_ip && i.public_ip.includes(".") && !i.public_ip.startsWith("None"));
+        const defaultInstId = realRunning?.instance_id || iData[0].instance_id;
+        setSelectedInstance(prev => {
+          if (!prev) return defaultInstId;
+          const current = iData.find((x: any) => x.instance_id === prev);
+          if (current && (current.state === "stopped" || !current.public_ip || current.public_ip.startsWith("None")) && realRunning) {
+            return realRunning.instance_id;
+          }
+          return prev;
+        });
+      }
     } catch { }
-  }, [selectedRepo, selectedInstance]);
+  }, []);
 
   useEffect(() => {
     loadData();
-    const timer = setInterval(loadData, 4000);
+    const timer = setInterval(() => {
+      fetch(`${API_BASE}/api/agent/ec2/instances`)
+        .then(r => r.json())
+        .then(d => {
+          if (Array.isArray(d)) setInstances(d);
+        })
+        .catch(() => {});
+    }, 6000);
     return () => clearInterval(timer);
   }, [loadData]);
 
@@ -3379,13 +3454,11 @@ function MainApp() {
 
   /* ─────────── REAL LIVE AGENT SSE STREAMING TO EC2 ─────────── */
   const send = useCallback(async (text?: string, targetRepoParam?: string, targetEc2Param?: string, envParam?: EnvTarget) => {
-    const t = (text ?? input).trim();
-    if (!t) return;
-    setInput("");
-
     const chosenRepo = targetRepoParam || selectedRepo || repos[0]?.name || "";
     const chosenEc2 = targetEc2Param || selectedInstance || instances[0]?.instance_id || "EC2-Target";
     const chosenEnv = envParam || target || "production";
+    const t = (text ?? input).trim() || `Deploy ${chosenRepo || "application"} to EC2 in ${chosenEnv} environment`;
+    setInput("");
 
     const isDeploymentIntent = t.toLowerCase().includes("deploy") || t.toLowerCase().includes("launch") || !!targetRepoParam;
 
@@ -3772,7 +3845,7 @@ function MainApp() {
                         <div>
                           <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-1)", letterSpacing: "-.01em" }}>Step 2: GitHub</div>
                           <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 300 }}>
-                            {githubProfile?.connected ? `@${githubProfile.username} · ${repos.length} repos` : "Click to connect token"}
+                            {githubProfile?.connected ? `@${githubProfile.username || githubProfile.login} · ${repos.length} repos` : "Click to connect token"}
                           </div>
                         </div>
                       </div>
@@ -3984,6 +4057,7 @@ function MainApp() {
                   setSelectedRepo={setSelectedRepo}
                   activeTarget={target}
                   setActiveTarget={setTarget}
+                  onDeployRepo={openDeployForRepo}
                 />
               )}
 

@@ -300,12 +300,12 @@ class ToolExecutor:
 
             elif tool_name == "connect_to_ec2_instance":
                 instance_id = arguments.get("instance_id") or context.get("ec2_id", "i-0a8f9c12345678")
-                public_ip = arguments.get("public_ip") or context.get("ec2_ip", "54.210.14.88")
+                public_ip = arguments.get("public_ip") or context.get("ec2_ip") or "54.158.24.184"
                 return self.aws.test_ec2_connection(instance_id, public_ip)
 
             elif tool_name == "install_docker_on_ec2":
                 instance_id = arguments.get("instance_id") or context.get("ec2_id", "i-0a8f9c12345678")
-                public_ip = arguments.get("public_ip") or context.get("ec2_ip", "54.210.14.88")
+                public_ip = arguments.get("public_ip") or context.get("ec2_ip") or "54.158.24.184"
                 return self.aws.install_docker_on_ec2(instance_id, public_ip)
 
             elif tool_name == "evaluate_blast_radius":
@@ -321,7 +321,7 @@ class ToolExecutor:
 
             elif tool_name == "deploy_to_ec2_instance":
                 instance_id = arguments.get("instance_id") or context.get("ec2_id", "i-0a8f9c12345678")
-                public_ip = arguments.get("public_ip") or context.get("ec2_ip", "54.210.14.88")
+                public_ip = arguments.get("public_ip") or context.get("ec2_ip") or "54.158.24.184"
                 repo_name = arguments.get("repo_name") or context.get("target_repo", "")
                 port = int(arguments.get("port") or context.get("port", 3000))
                 injected_env = context.get("injected_env", {})
@@ -336,7 +336,7 @@ class ToolExecutor:
                 return res
 
             elif tool_name == "verify_ec2_health_probe":
-                public_ip = arguments.get("public_ip") or context.get("ec2_ip", "54.210.14.88")
+                public_ip = arguments.get("public_ip") or context.get("ec2_ip") or "54.158.24.184"
                 port = int(arguments.get("port") or context.get("port", 3000))
                 path = arguments.get("path", "/health")
                 probe = self.aws.verify_ec2_health(public_ip=public_ip, port=port, health_path=path)
@@ -345,7 +345,7 @@ class ToolExecutor:
 
             elif tool_name == "diagnose_and_heal_anomaly":
                 instance_id = arguments.get("instance_id") or context.get("ec2_id", "i-0a8f9c12345678")
-                public_ip = arguments.get("public_ip") or context.get("ec2_ip", "54.210.14.88")
+                public_ip = arguments.get("public_ip") or context.get("ec2_ip") or "54.158.24.184"
                 port = int(arguments.get("port") or context.get("port", 3000))
                 error_type = arguments.get("error_type", "anomaly")
                 
@@ -365,7 +365,7 @@ class ToolExecutor:
             elif tool_name == "commit_to_proof_ledger":
                 instance_id = arguments.get("instance_id") or context.get("ec2_id", "i-0a8f9c12345678")
                 repo_name = arguments.get("repo_name") or context.get("target_repo", "")
-                public_ip = arguments.get("public_ip") or context.get("ec2_ip", "54.210.14.88")
+                public_ip = arguments.get("public_ip") or context.get("ec2_ip") or "54.158.24.184"
                 port = int(arguments.get("port") or context.get("port", 3000))
                 status = arguments.get("status", "PROVEN")
 
