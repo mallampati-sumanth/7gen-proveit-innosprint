@@ -1215,8 +1215,13 @@ def agent_get_tools():
     (Sarvam AI Studio, OpenAI, LangChain, etc.) to call backend functions.
     """
     try:
-        from proveit_model.agent.tools_registry import get_agent_tools_definitions
-        tools = get_agent_tools_definitions()
+        import importlib
+        try:
+            tools_mod = importlib.import_module("proveit_model.agent.tools_registry")
+        except ImportError:
+            tools_mod = importlib.import_module("model.proveit_model.agent.tools_registry")
+        get_tools_fn = getattr(tools_mod, "get_agent_tools_definitions", None)
+        tools = get_tools_fn() if get_tools_fn else []
         tools_list = [t.__dict__ if hasattr(t, "__dict__") else str(t) for t in tools]
     except Exception:
         tools_list = []
