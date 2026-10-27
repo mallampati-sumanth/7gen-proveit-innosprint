@@ -173,7 +173,7 @@ class SarvamVoiceService:
         self,
         query: str,
         user_repos: List[str],
-        min_threshold: float = 0.35,
+        min_threshold: float = 0.48,
     ) -> Dict[str, Any]:
         """
         Fuzzy searches user's repositories against what the caller said during a call.

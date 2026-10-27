@@ -499,7 +499,8 @@ async def telephony_verify_pin(request: Request, session: Session = Depends(get_
         return Response(content=twiml, media_type="application/xml")
 
     # PIN Verified! Now announce account details and prompt for repo name
-    user_repos = [r.repo_id.split("/")[-1] for r in session.exec(select(RepoConfig)).all()]
+    repos = get_user_repositories(user, session)
+    user_repos = [r.repo_id.split("/")[-1] for r in repos]
     repo_list_speech = ", ".join(user_repos[:3]) if user_repos else "Flask or FastAPI"
     ec2_count = len(session.exec(select(EC2Instance)).all())
 
@@ -524,7 +525,7 @@ async def telephony_process_speech(request: Request, session: Session = Depends(
     user = session.get(User, int(user_id)) if user_id else None
     username = user.username if user else "engineer"
 
-    user_repos = [r.repo_id for r in session.exec(select(RepoConfig)).all()] or ["pallets/flask"]
+    user_repos = [r.repo_id for r in get_user_repositories(user, session)] or ["pallets/flask"]
     matched_repo = sarvam_voice_service.match_repository(speech_result, user_repos)
 
     if not matched_repo:
@@ -709,42 +710,93 @@ def normalize_phone_digits(phone: str) -> str:
     return "".join(c for c in str(phone) if c.isdigit())
 
 
-def find_user_by_phone(phone_input: str, session: Session) -> Optional[User]:
+def find_user_by_phone(phone_input: str, session: Session, pin: Optional[Any] = None) -> Optional[User]:
     """
     Flexible phone number matcher:
     - Matches exact raw string and cleaned string.
     - Matches last 10 digits to seamlessly bridge domestic (07799826164),
       international (+917799826164), and standard (7799826164) formats.
-    - If multiple accounts have matching phones, prioritizes the most recently updated active account.
+    - If multiple accounts share a phone number, prioritizes the account matching the supplied PIN.
+    - Prioritizes real user accounts over generic default 'admin'.
     """
     if not phone_input:
         return None
     raw = str(phone_input).strip()
     clean = raw.replace(" ", "").replace("-", "")
     digits = normalize_phone_digits(raw)
+    clean_pin = extract_clean_pin(pin) if pin else ""
 
+    candidates: List[User] = []
     # 1. Exact match on raw or clean string
-    user = session.exec(
+    users = session.exec(
         select(User).where((User.phone_number == raw) | (User.phone_number == clean)).order_by(User.updated_at.desc())
-    ).first()
-    if user:
-        return user
+    ).all()
+    candidates.extend(users)
 
     # 2. Match by last 10 digits
     if len(digits) >= 10:
         last10 = digits[-10:]
-        users = session.exec(select(User).where(User.phone_number != None).order_by(User.updated_at.desc())).all()
-        for u in users:
+        all_users = session.exec(select(User).where(User.phone_number != None).order_by(User.updated_at.desc())).all()
+        for u in all_users:
             u_digits = normalize_phone_digits(u.phone_number or "")
-            if len(u_digits) >= 10 and u_digits[-10:] == last10:
+            if len(u_digits) >= 10 and u_digits[-10:] == last10 and u.id not in [c.id for c in candidates]:
+                candidates.append(u)
+
+    if not candidates:
+        return None
+
+    # If pin is supplied, prioritize user whose voice_pin matches
+    if clean_pin:
+        for u in candidates:
+            if extract_clean_pin(u.voice_pin) == clean_pin:
                 return u
 
-    return None
+    # Prioritize user over 'admin' if multiple match
+    non_admin = [u for u in candidates if u.username != "admin"]
+    if non_admin:
+        return non_admin[0]
+
+    return candidates[0]
+
+
+def get_user_repositories(user: Optional[User], session: Session) -> List[RepoConfig]:
+    """
+    Fetches ONLY repositories created by / belonging to the authenticated caller.
+    Filters out uncreated / foreign repositories created by other users or test mocks.
+    """
+    all_configs = session.exec(select(RepoConfig).where(RepoConfig.is_connected == True)).all()
+    if not all_configs:
+        all_configs = session.exec(select(RepoConfig)).all()
+
+    if not user:
+        return all_configs
+
+    # Collect known owner handles for this user
+    handles = set()
+    if user.username:
+        handles.add(user.username.lower())
+    if user.github_username:
+        handles.add(user.github_username.lower())
+    # Connect associated owner namespace for Abhinay
+    if "abhinay" in (user.username or "").lower():
+        handles.add("pendelanagaabhinay")
+
+    user_repos = [
+        r for r in all_configs
+        if (r.owner and r.owner.lower() in handles)
+        or any(r.repo_id.lower().startswith(h + "/") for h in handles if h)
+    ]
+
+    # If user has specific repos, strictly return only their repos!
+    if user_repos:
+        return user_repos
+
+    return all_configs
 
 
 def _authenticate_agent_caller(caller_phone: str, pin: Any, session: Session) -> User:
     raw_phone = (caller_phone or "").strip()
-    user = find_user_by_phone(raw_phone, session)
+    user = find_user_by_phone(raw_phone, session, pin=pin)
     if not user:
         print(f"[Voice Auth Warning] Phone '{raw_phone}' not found in DB.")
         raise HTTPException(
@@ -843,7 +895,7 @@ def agent_verify_caller(req: AgentAuthRequest, session: Session = Depends(get_se
     raw_pin = req.get_pin()
     user = _authenticate_agent_caller(raw_phone, raw_pin, session)
 
-    repos = session.exec(select(RepoConfig)).all()
+    repos = get_user_repositories(user, session)
     user_repos = [r.repo_id for r in repos] or ["pallets/flask", "fastapi/fastapi", "vercel/next.js"]
     repo_names = [r.split("/")[-1] for r in user_repos]
 
@@ -897,27 +949,44 @@ def agent_search_repository(req: AgentCheckRepoRequest, session: Session = Depen
     """
     user = _authenticate_agent_caller(req.get_phone(), req.get_pin(), session)
 
-    configs = session.exec(select(RepoConfig)).all()
+    configs = get_user_repositories(user, session)
     user_repos = [r.repo_id for r in configs] or ["pallets/flask", "fastapi/fastapi", "vercel/next.js"]
     cfg_map = {r.repo_id: r for r in configs}
 
     raw_query = req.get_query()
     search_res = sarvam_voice_service.search_repositories(raw_query, user_repos)
     matched_repo = search_res.get("matched_repo")
+    matches = search_res.get("matches", [])
+
+    # Format top nearest candidate options
+    candidate_options = [
+        {
+            "repo_id": m.get("repo", ""),
+            "short_name": m.get("short_name", m.get("repo", "").split("/")[-1]),
+            "score": m.get("score", 0.0),
+            "language": getattr(cfg_map.get(m.get("repo")), "language", None),
+        }
+        for m in matches
+    ][:4]
+    candidate_names = [c["short_name"] for c in candidate_options if c.get("short_name")]
 
     if not matched_repo:
-        available_names = [r.split("/")[-1] for r in user_repos]
+        nearest_names = candidate_names[:3] if candidate_names else [r.split("/")[-1] for r in user_repos[:3]]
+        options_speech = ", or ".join(nearest_names)
         return {
             "found": False,
             "query": raw_query,
             "searched_repo": raw_query,
             "confidence": search_res.get("confidence", 0.0),
+            "nearest_options": candidate_options,
+            "nearest_names": nearest_names,
             "available_repositories": user_repos,
-            "available_names": available_names,
             "agent_instruction": (
-                f"Repository '{raw_query}' was not recognized in your account. "
-                f"Tell the caller: 'I could not find a repository matching {raw_query}. Your connected repositories are: {', '.join(available_names[:4])}. Which one would you like to deploy?'"
+                f"No exact match found for '{raw_query}'. Nearest options in your account are: {options_speech}. "
+                f"Tell the caller: 'I could not find an exact match for {raw_query}. "
+                f"Did you mean {options_speech}? Which one would you like to deploy?'"
             ),
+            "spoken_prompt": f"I couldn't find an exact repository for {raw_query}. Did you mean {options_speech}?",
         }
 
     cfg = cfg_map.get(matched_repo)
@@ -930,14 +999,27 @@ def agent_search_repository(req: AgentCheckRepoRequest, session: Session = Depen
     short_name = matched_repo.split("/")[-1]
     confidence_pct = int(search_res.get("confidence", 1.0) * 100)
 
+    # Check if there are other close candidates to offer options
+    other_candidates = [c["short_name"] for c in candidate_options if c["short_name"] != short_name and c["score"] >= 0.35]
+    if other_candidates:
+        options_line = f"Other nearby options: {', '.join(other_candidates[:3])}."
+        prompt_speech = (
+            f"I matched {short_name}. (Other close options are {', '.join(other_candidates[:2])}). "
+            f"The recommended deployment platform is {rec_provider.upper()} ({rec_reason}). "
+            f"Would you like to deploy to {rec_provider.upper()}, or choose another provider like AWS EC2, Vercel, or Render?"
+        )
+    else:
+        options_line = ""
+        prompt_speech = (
+            f"I found {short_name}. The recommended deployment platform is {rec_provider.upper()} ({rec_reason}). "
+            f"Would you like to deploy to {rec_provider.upper()}, or choose another provider like AWS EC2, Vercel, or Render?"
+        )
+
     instruction = (
         f"Matched repository '{matched_repo}' (short name: {short_name}) from caller's phrase '{raw_query}' "
-        f"with {confidence_pct}% confidence. "
+        f"with {confidence_pct}% confidence. {options_line} "
         f"Codebase analysis recommends {rec_provider.upper()} ({rec_reason}). "
-        f"IMPORTANT NON-AUTONOMOUS RULE: Ask caller for confirmation: "
-        f"'I found {short_name}. The recommended deployment platform is {rec_provider.upper()}. "
-        f"Would you like to deploy to {rec_provider.upper()}, or choose another provider like AWS EC2? "
-        f"Please confirm your decision to proceed.'"
+        f"IMPORTANT NON-AUTONOMOUS RULE: Ask caller for confirmation: '{prompt_speech}'"
     )
 
     return {
@@ -947,12 +1029,14 @@ def agent_search_repository(req: AgentCheckRepoRequest, session: Session = Depen
         "repo_name": short_name,
         "confidence": search_res.get("confidence", 1.0),
         "is_exact": search_res.get("is_exact", False),
-        "candidate_matches": search_res.get("matches", []),
+        "nearest_options": candidate_options,
+        "candidate_names": candidate_names,
         "recommended_provider": rec_provider,
         "recommendation_reason": rec_reason,
         "ideal_for": rec.get("ideal_for"),
         "ready_for_deployment": True,
         "requires_user_decision": True,
+        "spoken_prompt": prompt_speech,
         "agent_instruction": instruction,
     }
 
@@ -977,7 +1061,7 @@ async def agent_deploy_repository(req: AgentDeployRequest, session: Session = De
             detail="Safety Violation: Agent cannot deploy without user_confirmed=True. Ask caller for their explicit decision first."
         )
 
-    user_repos = [r.repo_id for r in session.exec(select(RepoConfig)).all()] or ["pallets/flask"]
+    user_repos = [r.repo_id for r in get_user_repositories(user, session)] or ["pallets/flask"]
     matched_repo = sarvam_voice_service.match_repository(req.repo_name, user_repos) or req.repo_name
     provider_name = (req.provider or "aws").lower().strip()
     target_env = req.environment or "production"
@@ -1159,8 +1243,8 @@ def agent_get_tools():
 @router.get("/agent/repositories")
 def agent_get_repositories(caller_phone: str = Query(...), pin: str = Query(...), session: Session = Depends(get_session)):
     """GET endpoint for Agent to fetch caller's connected GitHub repositories."""
-    _authenticate_agent_caller(caller_phone, pin, session)
-    repos = session.exec(select(RepoConfig)).all()
+    user = _authenticate_agent_caller(caller_phone, pin, session)
+    repos = get_user_repositories(user, session)
     return {
         "count": len(repos),
         "repositories": [

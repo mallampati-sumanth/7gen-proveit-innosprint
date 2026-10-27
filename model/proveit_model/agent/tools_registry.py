@@ -413,7 +413,7 @@ def _get_sre_service():
         return None
 
 
-def _get_db_repo_configs() -> List[Dict[str, Any]]:
+def _get_db_repo_configs(owner_hint: Optional[str] = None) -> List[Dict[str, Any]]:
     """Dynamically loads repository configurations from SQLite/SQLModel DB without static coupling."""
     try:
         import importlib
@@ -430,7 +430,22 @@ def _get_db_repo_configs() -> List[Dict[str, Any]]:
             return []
 
         with Session(engine) as sess:
-            configs = sess.exec(select(RepoConfig)).all()
+            configs = sess.exec(select(RepoConfig).where(RepoConfig.is_connected == True)).all()
+            if not configs:
+                configs = sess.exec(select(RepoConfig)).all()
+
+            if owner_hint:
+                handles = {owner_hint.lower()}
+                if "abhinay" in owner_hint.lower():
+                    handles.add("pendelanagaabhinay")
+                user_configs = [
+                    c for c in configs
+                    if (getattr(c, "owner", "") and getattr(c, "owner", "").lower() in handles)
+                    or any(getattr(c, "repo_id", "").lower().startswith(h + "/") for h in handles)
+                ]
+                if user_configs:
+                    configs = user_configs
+
             return [
                 {
                     "repo_id": getattr(c, "repo_id", ""),
@@ -663,7 +678,8 @@ class ToolExecutor:
 
             elif tool_name == "search_user_repositories":
                 query = arguments.get("query") or arguments.get("repo_name", "")
-                configs = _get_db_repo_configs()
+                owner_hint = context.get("username") or context.get("owner")
+                configs = _get_db_repo_configs(owner_hint=owner_hint)
                 user_repos = [c["repo_id"] for c in configs if c.get("repo_id")]
                 if not user_repos:
                     user_repos = ["pallets/flask", "fastapi/fastapi", "vercel/next.js"]
@@ -682,6 +698,11 @@ class ToolExecutor:
                     }
 
                 matched = search_res.get("matched_repo")
+                matches = search_res.get("matches", [])
+                candidate_names = [m.get("short_name", m.get("repo_id", m.get("repo", "")).split("/")[-1]) for m in matches if m][:4]
+                search_res["candidate_names"] = candidate_names
+                search_res["nearest_options"] = matches[:4]
+
                 cloud_reg = _get_cloud_registry()
                 rec = cloud_reg.recommend_provider(matched or query) if (cloud_reg and matched) else {}
                 search_res["recommendation"] = rec
@@ -690,7 +711,8 @@ class ToolExecutor:
 
             elif tool_name == "list_user_repositories":
                 cloud_reg = _get_cloud_registry()
-                configs = _get_db_repo_configs()
+                owner_hint = context.get("username") or context.get("owner")
+                configs = _get_db_repo_configs(owner_hint=owner_hint)
                 repos_list = [
                     {
                         "repo_id": c["repo_id"],
