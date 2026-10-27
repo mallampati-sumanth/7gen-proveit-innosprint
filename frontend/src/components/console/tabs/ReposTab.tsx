@@ -290,19 +290,19 @@ export const ReposTab = ({
                   >
                     {r.name} <I.ExternalLink />
                   </a>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, padding: "1px 6px", borderRadius: 4, background: "var(--blue-bg)", color: "var(--blue)" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: "var(--blue-bg)", color: "var(--blue)" }}>
                     {r.language || "Other"}
                   </span>
                   {r.framework && (
-                    <span style={{ fontSize: 10.5, fontWeight: 600, padding: "1px 6px", borderRadius: 4, background: "var(--badge-bg)", color: "var(--text-2)" }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 7px", borderRadius: 4, background: "var(--badge-bg)", color: "var(--text-2)" }}>
                       {r.framework}
                     </span>
                   )}
-                  <span style={{ fontSize: 10.5, color: "var(--text-3)", fontFamily: "JetBrains Mono, monospace" }}>
+                  <span style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "JetBrains Mono, monospace" }}>
                     port: {r.default_port}
                   </span>
                   {r.default_branch && (
-                    <span style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "JetBrains Mono, monospace" }}>
+                    <span style={{ fontSize: 11, color: "var(--text-3)", fontFamily: "JetBrains Mono, monospace" }}>
                       branch: {r.default_branch}
                     </span>
                   )}

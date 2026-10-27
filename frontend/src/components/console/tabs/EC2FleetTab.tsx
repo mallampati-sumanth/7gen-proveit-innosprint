@@ -194,21 +194,21 @@ export const EC2FleetTab = ({
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text-1)" }}>{inst.name}</span>
                     {isMock ? (
-                      <span style={{ fontSize: 9.5, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(234, 179, 8, 0.15)", color: "#d97706", border: "1px solid rgba(234, 179, 8, 0.3)" }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: "rgba(234, 179, 8, 0.15)", color: "#d97706", border: "1px solid rgba(234, 179, 8, 0.3)" }} title="Offline mock node for sandbox unit testing">
                         SIMULATED NODE
                       </span>
                     ) : (
-                      <span style={{ fontSize: 9.5, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(22, 163, 74, 0.15)", color: "#16a34a", border: "1px solid rgba(22, 163, 74, 0.3)" }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: "rgba(22, 163, 74, 0.15)", color: "#16a34a", border: "1px solid rgba(22, 163, 74, 0.3)" }} title="Active AWS EC2 node">
                         LIVE AWS NODE
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 11.5, color: "var(--text-3)", fontFamily: "JetBrains Mono, monospace", marginTop: 2 }}>
+                  <div style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "JetBrains Mono, monospace", marginTop: 2 }}>
                     {inst.instance_id} · {inst.region}
                   </div>
                 </div>
                 <span style={{
-                  fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 4,
+                  fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4,
                   background: isRunning ? "#16a34a" : isStopped ? "rgba(220, 38, 38, 0.15)" : "rgba(234, 179, 8, 0.15)",
                   color: isRunning ? "#ffffff" : isStopped ? "#dc2626" : "#d97706",
                   border: isRunning ? "none" : `1px solid ${isStopped ? "rgba(220,38,38,0.3)" : "rgba(234,179,8,0.3)"}`,

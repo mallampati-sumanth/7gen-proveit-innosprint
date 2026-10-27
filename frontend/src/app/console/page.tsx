@@ -71,6 +71,7 @@ function MainApp() {
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [provisionModalOpen, setProvisionModalOpen] = useState(false);
   const [provisionContext, setProvisionContext] = useState<any>(null);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -392,14 +393,17 @@ function MainApp() {
           onDeployClick={() => setDeployModalOpen(true)}
           currentUser={user.username}
           onLogout={logout}
+          onToggleSidebar={() => setMobileSidebarOpen(prev => !prev)}
         />
 
         <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-          {/* Modular Sidebar */}
+          {/* Modular Sidebar with Responsive Mobile Drawer */}
           <Sidebar
             view={view}
             setView={setView}
             selectedInstance={selectedInstance}
+            isOpen={mobileSidebarOpen}
+            onClose={() => setMobileSidebarOpen(false)}
           />
 
           {/* Main Workspace Area */}

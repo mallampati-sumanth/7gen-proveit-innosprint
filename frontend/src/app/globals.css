@@ -102,6 +102,31 @@ header button:not([disabled]):hover {
   opacity: 0.8;
 }
 
+/* ─── Responsive Mobile Sidebar Drawer ─── */
+@media (max-width: 768px) {
+  .mobile-menu-btn {
+    display: inline-flex !important;
+  }
+  .console-sidebar {
+    position: fixed !important;
+    top: 56px !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    z-index: 70 !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
+  }
+  .console-sidebar.closed {
+    transform: translateX(-100%) !important;
+  }
+  .console-sidebar.open {
+    transform: translateX(0) !important;
+  }
+  .mobile-sidebar-backdrop {
+    display: block !important;
+  }
+}
+
+
 /* ─── Quick chip / pill hover ─── */
 button[style*="border-radius: 980"]:not([disabled]):hover {
   opacity: 0.8;
