@@ -33,9 +33,14 @@ export const ReposTab = ({
 
   const filtered = repos.filter(r => {
     const repoIdentifier = (r.name || r.repo_name || "").toLowerCase();
+    const repoOwner = (r.owner || "").toLowerCase();
     const matchesSearch = repoIdentifier.includes(search.toLowerCase()) || (r.description && r.description.toLowerCase().includes(search.toLowerCase()));
     const matchesLang = langFilter === "ALL" || (r.language && r.language.toLowerCase() === langFilter.toLowerCase());
-    const matchesOwner = ownerFilter === "all" || (myUsername && (r.owner || "").toLowerCase() === myUsername);
+    const isMine = myUsername && (
+      repoOwner === myUsername ||
+      (myUsername.includes("abhinay") && repoOwner.includes("abhinay"))
+    );
+    const matchesOwner = ownerFilter === "all" || isMine;
     return matchesSearch && matchesLang && matchesOwner;
   });
 

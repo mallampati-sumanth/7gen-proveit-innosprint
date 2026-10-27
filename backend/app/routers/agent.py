@@ -4,8 +4,11 @@ import os
 import time
 import hashlib
 import asyncio
+import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -202,7 +205,7 @@ def connect_github_account(req: GitHubConnectRequest, session: Session = Depends
         pass
 
     # Sync real user repositories into the database
-    real_repos = github_tools.list_user_repositories(token=tok, per_page=100)
+    real_repos = github_tools.list_user_repositories(token=tok, per_page=100, fetch_all=True)
     synced_count = 0
     for r in real_repos:
         repo_id = r["name"]
@@ -216,6 +219,7 @@ def connect_github_account(req: GitHubConnectRequest, session: Session = Depends
                 language=r.get("language", "Other"),
                 default_branch=r.get("default_branch", "main"),
                 clone_url=r.get("clone_url"),
+                is_connected=True,
             )
             session.add(new_r)
             synced_count += 1
@@ -226,6 +230,7 @@ def connect_github_account(req: GitHubConnectRequest, session: Session = Depends
             existing.language = r.get("language", existing.language)
             existing.default_branch = r.get("default_branch", existing.default_branch)
             existing.clone_url = r.get("clone_url", existing.clone_url)
+            existing.is_connected = True
             session.add(existing)
             synced_count += 1
     session.commit()
@@ -240,12 +245,12 @@ def connect_github_account(req: GitHubConnectRequest, session: Session = Depends
 
 @router.post("/github/sync-repos")
 def sync_github_repositories(token: Optional[str] = None, session: Session = Depends(get_session)):
-    """Sync all real repositories from connected GitHub account into the database."""
+    """Sync all real repositories from connected GitHub account into the database with full pagination."""
     tok = (token or "").strip() or settings.GITHUB_TOKEN
     if not tok or tok.startswith("ghp_demo") or tok.startswith("ghp_your"):
         raise HTTPException(status_code=400, detail="No valid GitHub Personal Access Token configured. Connect your token first.")
 
-    real_repos = github_tools.list_user_repositories(token=tok, per_page=100)
+    real_repos = github_tools.list_user_repositories(token=tok, per_page=100, fetch_all=True)
     synced = []
     for r in real_repos:
         repo_id = r["name"]
@@ -259,12 +264,17 @@ def sync_github_repositories(token: Optional[str] = None, session: Session = Dep
                 language=r.get("language", "Other"),
                 default_branch=r.get("default_branch", "main"),
                 clone_url=r.get("clone_url"),
+                is_connected=True,
             )
             session.add(existing)
         else:
+            existing.repo_name = r.get("repo_name", existing.repo_name)
+            existing.owner = r.get("owner", existing.owner)
             existing.description = r.get("description", existing.description)
             existing.language = r.get("language", existing.language)
             existing.default_branch = r.get("default_branch", existing.default_branch)
+            existing.clone_url = r.get("clone_url", existing.clone_url)
+            existing.is_connected = True
             session.add(existing)
         synced.append(repo_id)
 
@@ -274,7 +284,7 @@ def sync_github_repositories(token: Optional[str] = None, session: Session = Dep
 
 @router.get("/repos")
 def list_repositories(owner: Optional[str] = None, token: Optional[str] = None, session: Session = Depends(get_session)):
-    """List connected GitHub repositories from the database for the active user."""
+    """List connected GitHub repositories from the database for the active user across all pages."""
     cleaned_token = (token or "").strip()
     if cleaned_token and cleaned_token != settings.GITHUB_TOKEN:
         settings.GITHUB_TOKEN = cleaned_token
@@ -288,45 +298,51 @@ def list_repositories(owner: Optional[str] = None, token: Optional[str] = None, 
     profile = github_tools.get_user_profile(token=active_tok)
     connected_login = (profile.get("login") or "").strip().lower()
     req_owner = owner.strip().lower() if isinstance(owner, str) and owner.strip() else None
-    target_owner = req_owner or connected_login
+
+    # Check total repo count in DB
+    total_in_db = session.exec(select(func.count(RepoConfig.id))).one()
+
+    # If database has fewer than 100 repos and we have an active token, auto-sync all pages from GitHub
+    if total_in_db < 100 and active_tok and not active_tok.startswith("ghp_demo") and not active_tok.startswith("ghp_your"):
+        try:
+            real_repos = github_tools.list_user_repositories(token=active_tok, fetch_all=True)
+            for r in real_repos:
+                repo_id = r["name"]
+                existing = session.exec(select(RepoConfig).where(RepoConfig.repo_id == repo_id)).first()
+                if not existing:
+                    new_r = RepoConfig(
+                        repo_id=repo_id,
+                        repo_name=r.get("repo_name", repo_id.split("/")[-1]),
+                        owner=r.get("owner", ""),
+                        description=r.get("description", "GitHub repository"),
+                        language=r.get("language", "Other"),
+                        default_branch=r.get("default_branch", "main"),
+                        clone_url=r.get("clone_url"),
+                        is_connected=True,
+                    )
+                    session.add(new_r)
+                else:
+                    existing.repo_name = r.get("repo_name", existing.repo_name)
+                    existing.owner = r.get("owner", existing.owner)
+                    existing.description = r.get("description", existing.description)
+                    existing.language = r.get("language", existing.language)
+                    existing.default_branch = r.get("default_branch", existing.default_branch)
+                    existing.clone_url = r.get("clone_url", existing.clone_url)
+                    existing.is_connected = True
+                    session.add(existing)
+            session.commit()
+        except Exception as e:
+            logger.warning(f"Auto-sync repos in list_repositories encountered: {e}")
 
     query = select(RepoConfig)
-    if target_owner and target_owner != "all":
-        query = query.where(func.lower(RepoConfig.owner) == target_owner)
+    # Only filter by owner if req_owner was explicitly requested and is not "all"
+    if req_owner and req_owner != "all":
+        query = query.where(func.lower(RepoConfig.owner) == req_owner)
 
     db_repos = session.exec(query.order_by(RepoConfig.updated_at.desc(), RepoConfig.id.desc())).all()
 
-    # If database has no repos for this connected user, auto-sync their repos live from GitHub API
     if not db_repos and active_tok and not active_tok.startswith("ghp_demo"):
-        real_repos = github_tools.list_user_repositories(token=active_tok)
-        for r in real_repos:
-            repo_id = r["name"]
-            existing = session.exec(select(RepoConfig).where(RepoConfig.repo_id == repo_id)).first()
-            if not existing:
-                new_r = RepoConfig(
-                    repo_id=repo_id,
-                    repo_name=r.get("repo_name", repo_id.split("/")[-1]),
-                    owner=r.get("owner", ""),
-                    description=r.get("description", "GitHub repository"),
-                    language=r.get("language", "Other"),
-                    default_branch=r.get("default_branch", "main"),
-                    clone_url=r.get("clone_url"),
-                )
-                session.add(new_r)
-        session.commit()
-        if target_owner and target_owner != "all":
-            db_repos = session.exec(
-                select(RepoConfig)
-                .where(func.lower(RepoConfig.owner) == target_owner)
-                .order_by(RepoConfig.updated_at.desc(), RepoConfig.id.desc())
-            ).all()
-        else:
-            db_repos = session.exec(
-                select(RepoConfig).order_by(RepoConfig.updated_at.desc(), RepoConfig.id.desc())
-            ).all()
-
-    if not db_repos and settings.GITHUB_TOKEN and not settings.GITHUB_TOKEN.startswith("ghp_demo"):
-        return github_tools.list_user_repositories(token=settings.GITHUB_TOKEN)
+        return github_tools.list_user_repositories(token=active_tok, fetch_all=True)
 
     result = []
     for r in db_repos:
@@ -349,8 +365,14 @@ def list_repositories(owner: Optional[str] = None, token: Optional[str] = None, 
         })
 
     # Sort so that repositories owned by the connected user come first
-    if target_owner and target_owner != "all":
-        result.sort(key=lambda item: 0 if item.get("owner", "").lower() == target_owner else 1)
+    if connected_login:
+        priority_owners = {connected_login}
+        if "abhinay" in connected_login:
+            priority_owners.add("pendelanagaabhinay")
+        result.sort(key=lambda item: (
+            0 if item.get("owner", "").lower() in priority_owners else 1,
+            item.get("name", "")
+        ))
 
     return result
 

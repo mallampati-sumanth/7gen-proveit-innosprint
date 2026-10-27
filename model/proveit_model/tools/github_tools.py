@@ -73,55 +73,78 @@ class GitHubTools:
                 "message": f"Connection error: {str(e)}",
             }
 
-    def list_user_repositories(self, token: Optional[str] = None, page: int = 1, per_page: int = 50) -> List[Dict[str, Any]]:
-        """Fetch real user repositories directly from GitHub API."""
+    def list_user_repositories(
+        self,
+        token: Optional[str] = None,
+        page: int = 1,
+        per_page: int = 100,
+        fetch_all: bool = True,
+        max_pages: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Fetch real user repositories directly from GitHub API with full pagination support."""
         headers = self._get_headers(token)
         if "Authorization" not in headers:
             return []
 
+        profile = self.get_user_profile(token)
+        my_login = (profile.get("login") or "").lower()
+
+        all_raw_repos = []
+        current_page = page
+
         try:
-            with httpx.Client(timeout=20.0, verify=False) as client:
-                res = client.get(
-                    f"https://api.github.com/user/repos?sort=updated&per_page={per_page}&page={page}&affiliation=owner,collaborator",
-                    headers=headers
-                )
-                if res.status_code == 200:
-                    raw_repos = res.json()
-                    profile = self.get_user_profile(token)
-                    my_login = (profile.get("login") or "").lower()
+            with httpx.Client(timeout=25.0, verify=False) as client:
+                while True:
+                    res = client.get(
+                        f"https://api.github.com/user/repos?sort=updated&per_page={per_page}&page={current_page}&affiliation=owner,collaborator,organization_member",
+                        headers=headers
+                    )
+                    if res.status_code != 200:
+                        logger.warning(f"GitHub repos fetch returned HTTP {res.status_code}: {res.text[:120]}")
+                        break
+                    raw_page = res.json()
+                    if not raw_page or not isinstance(raw_page, list):
+                        break
+                    all_raw_repos.extend(raw_page)
+                    if not fetch_all or len(raw_page) < per_page or current_page >= max_pages:
+                        break
+                    current_page += 1
 
-                    result = []
-                    for r in raw_repos:
-                        lang = (r.get("language") or "Other").lower()
-                        port = 8000 if "python" in lang else (3000 if ("typescript" in lang or "javascript" in lang) else 5000)
-                        result.append({
-                            "id": str(r.get("id")),
-                            "name": r.get("full_name") or r.get("name"),
-                            "repo_name": r.get("name"),
-                            "owner": r.get("owner", {}).get("login", ""),
-                            "description": r.get("description") or "GitHub repository",
-                            "language": r.get("language") or "Other",
-                            "lang": r.get("language") or "Other",
-                            "default_port": port,
-                            "port": port,
-                            "default_branch": r.get("default_branch", "main"),
-                            "clone_url": r.get("clone_url"),
-                            "html_url": r.get("html_url"),
-                            "private": r.get("private", False),
-                            "stars": r.get("stargazers_count", 0),
-                            "forks": r.get("forks_count", 0),
-                            "updated_at": r.get("updated_at"),
-                            "status": "connected",
-                        })
+                result = []
+                seen_ids = set()
+                for r in all_raw_repos:
+                    repo_full_name = r.get("full_name") or r.get("name")
+                    if not repo_full_name or repo_full_name in seen_ids:
+                        continue
+                    seen_ids.add(repo_full_name)
 
-                    # Prioritize repositories owned by the authenticated user
-                    if my_login:
-                        result.sort(key=lambda item: (0 if item.get("owner", "").lower() == my_login else 1, item.get("name", "")))
+                    lang = (r.get("language") or "Other").lower()
+                    port = 8000 if "python" in lang else (3000 if ("typescript" in lang or "javascript" in lang) else 5000)
+                    result.append({
+                        "id": str(r.get("id")),
+                        "name": repo_full_name,
+                        "repo_name": r.get("name"),
+                        "owner": r.get("owner", {}).get("login", ""),
+                        "description": r.get("description") or "GitHub repository",
+                        "language": r.get("language") or "Other",
+                        "lang": r.get("language") or "Other",
+                        "default_port": port,
+                        "port": port,
+                        "default_branch": r.get("default_branch", "main"),
+                        "clone_url": r.get("clone_url"),
+                        "html_url": r.get("html_url"),
+                        "private": r.get("private", False),
+                        "stars": r.get("stargazers_count", 0),
+                        "forks": r.get("forks_count", 0),
+                        "updated_at": r.get("updated_at"),
+                        "status": "connected",
+                    })
 
-                    return result
-                else:
-                    logger.warning(f"GitHub repos fetch returned HTTP {res.status_code}: {res.text[:120]}")
-                    return []
+                # Prioritize repositories owned by the authenticated user
+                if my_login:
+                    result.sort(key=lambda item: (0 if item.get("owner", "").lower() == my_login else 1, item.get("name", "")))
+
+                return result
         except Exception as e:
             logger.error(f"Live GitHub repos fetch failed: {e}")
             return []
