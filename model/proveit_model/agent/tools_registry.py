@@ -232,7 +232,56 @@ def get_agent_tools_definitions() -> List[ToolDefinition]:
                 "required": ["instance_id", "repo_name", "status"]
             }
         ),
+        ToolDefinition(
+            name="deploy_to_vercel",
+            description="Deploys a Next.js/React or frontend repository to Vercel edge infrastructure and returns a live preview URL.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "repo_url": {"type": "string", "description": "GitHub repository e.g. 'owner/repo'"},
+                    "branch": {"type": "string", "default": "main"}
+                },
+                "required": ["repo_url"]
+            }
+        ),
+        ToolDefinition(
+            name="deploy_to_render",
+            description="Deploys a backend API or Docker web service to Render cloud and provisions TLS certificates.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "repo_url": {"type": "string", "description": "GitHub repository name"},
+                    "branch": {"type": "string", "default": "main"}
+                },
+                "required": ["repo_url"]
+            }
+        ),
+        ToolDefinition(
+            name="deploy_to_railway",
+            description="Deploys full-stack containers, Dockerfiles, and databases to Railway cloud infrastructure.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "repo_url": {"type": "string", "description": "GitHub repository name"},
+                    "branch": {"type": "string", "default": "main"}
+                },
+                "required": ["repo_url"]
+            }
+        ),
+        ToolDefinition(
+            name="autonomous_sre_heal",
+            description="Autonomous SRE: Diagnoses runtime error logs using LLM reasoning and auto-remediates the service (injects secrets, switches ports, or rolls back).",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "target_service": {"type": "string", "description": "Target service identifier"},
+                    "error_log": {"type": "string", "description": "Crash log or stderr stack trace"}
+                },
+                "required": ["target_service", "error_log"]
+            }
+        ),
     ]
+
 
 
 class ToolExecutor:
@@ -382,6 +431,38 @@ class ToolExecutor:
                     "actor": "proveit-type4-autonomous-agent",
                     "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 }
+
+            elif tool_name == "deploy_to_vercel":
+                from backend.app.providers.registry import cloud_registry
+                repo_url = arguments.get("repo_url") or context.get("target_repo", "")
+                branch = arguments.get("branch", "main")
+                res = await cloud_registry.get_provider("vercel").deploy_repository(repo_url, branch=branch)
+                context["app_url"] = res.live_url
+                return res.model_dump()
+
+            elif tool_name == "deploy_to_render":
+                from backend.app.providers.registry import cloud_registry
+                repo_url = arguments.get("repo_url") or context.get("target_repo", "")
+                branch = arguments.get("branch", "main")
+                res = await cloud_registry.get_provider("render").deploy_repository(repo_url, branch=branch)
+                context["app_url"] = res.live_url
+                return res.model_dump()
+
+            elif tool_name == "deploy_to_railway":
+                from backend.app.providers.registry import cloud_registry
+                repo_url = arguments.get("repo_url") or context.get("target_repo", "")
+                branch = arguments.get("branch", "main")
+                res = await cloud_registry.get_provider("railway").deploy_repository(repo_url, branch=branch)
+                context["app_url"] = res.live_url
+                return res.model_dump()
+
+            elif tool_name == "autonomous_sre_heal":
+                from backend.app.services.self_healing import sre_service
+                target = arguments.get("target_service") or context.get("target_repo", "service")
+                error_log = arguments.get("error_log", "Error: Process exited with status 1")
+                diagnosis = await sre_service.diagnose_anomaly(target_service=target, error_log=error_log)
+                healed = await sre_service.execute_healing(diagnosis)
+                return healed.model_dump()
 
             else:
                 return {"error": f"Unknown tool: '{tool_name}'"}
