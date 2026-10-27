@@ -9,6 +9,8 @@ export const DeploymentWizardModal = ({
   instances,
   selectedRepo,
   selectedInstance,
+  onRepoChange,
+  onInstanceChange,
   onLaunch,
 }: {
   open: boolean;
@@ -17,18 +19,41 @@ export const DeploymentWizardModal = ({
   instances: EC2InstanceItem[];
   selectedRepo: string;
   selectedInstance: string;
+  onRepoChange?: (repo: string) => void;
+  onInstanceChange?: (inst: string) => void;
   onLaunch: (repo: string, instance: string, env: EnvTarget) => void;
 }) => {
   const [repo, setRepo] = useState(selectedRepo || repos[0]?.name || "");
   const [inst, setInst] = useState(selectedInstance || instances[0]?.instance_id || "");
   const [env, setEnv] = useState<EnvTarget>("production");
 
+  // Only initialize when modal is freshly opened
   useEffect(() => {
-    if (selectedRepo) setRepo(selectedRepo);
-    else if (repos[0]?.name) setRepo(repos[0].name);
-    if (selectedInstance) setInst(selectedInstance);
-    else if (instances[0]?.instance_id) setInst(instances[0].instance_id);
-  }, [selectedRepo, selectedInstance, repos, instances]);
+    if (open) {
+      const defaultRepo = (selectedRepo && repos.some(r => r.name === selectedRepo))
+        ? selectedRepo
+        : (repos[0]?.name || selectedRepo || "");
+      const defaultInst = (selectedInstance && instances.some(i => i.instance_id === selectedInstance))
+        ? selectedInstance
+        : (instances[0]?.instance_id || selectedInstance || "");
+
+      setRepo(defaultRepo);
+      setInst(defaultInst);
+      setEnv("production");
+    }
+  }, [open]);
+
+  // Fallback for late-loading data without overriding existing user selection
+  useEffect(() => {
+    if (open) {
+      if (!repo && repos.length > 0) {
+        setRepo(selectedRepo || repos[0].name);
+      }
+      if (!inst && instances.length > 0) {
+        setInst(selectedInstance || instances[0].instance_id);
+      }
+    }
+  }, [open, repos.length, instances.length]);
 
   if (!open) return null;
 
@@ -57,7 +82,12 @@ export const DeploymentWizardModal = ({
             </div>
           ) : (
             <select
-              value={repo} onChange={e => setRepo(e.target.value)}
+              value={repo}
+              onChange={e => {
+                const val = e.target.value;
+                setRepo(val);
+                onRepoChange?.(val);
+              }}
               style={{ width: "100%", padding: "9px 12px", borderRadius: 8, background: "var(--bg-input)", color: "var(--text-1)", border: "1px solid var(--border)", fontSize: 13, fontFamily: "JetBrains Mono, monospace" }}
             >
               {repos.map(r => <option key={r.name} value={r.name}>{r.name} ({r.language})</option>)}
@@ -68,7 +98,12 @@ export const DeploymentWizardModal = ({
         <div>
           <label style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-2)", marginBottom: 6, display: "block" }}>2. Select Target EC2 Instance</label>
           <select
-            value={inst} onChange={e => setInst(e.target.value)}
+            value={inst}
+            onChange={e => {
+              const val = e.target.value;
+              setInst(val);
+              onInstanceChange?.(val);
+            }}
             style={{ width: "100%", padding: "9px 12px", borderRadius: 8, background: "var(--bg-input)", color: "var(--text-1)", border: "1px solid var(--border)", fontSize: 13, fontFamily: "JetBrains Mono, monospace" }}
           >
             <option value="NEW_INSTANCE"> + Launch &amp; Provision New EC2 Node in AWS</option>

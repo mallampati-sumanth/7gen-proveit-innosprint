@@ -51,10 +51,11 @@ class OpenAIProvider(BaseLLMProvider):
                     formatted_msgs.append({"role": "system", "content": system_instruction})
 
                 for m in messages:
-                    msg_dict = {"role": m.role, "content": m.content or ""}
+                    mapped_role = "assistant" if m.role in ["agent", "assistant", "model", "bot"] else ("user" if m.role == "user" else "system")
+                    msg_dict = {"role": mapped_role, "content": m.content or ""}
                     if m.role == "tool" and m.tool_call_id:
                         msg_dict["tool_call_id"] = m.tool_call_id
-                    elif m.role == "assistant" and m.tool_calls:
+                    elif mapped_role == "assistant" and m.tool_calls:
                         msg_dict["tool_calls"] = [
                             {
                                 "id": tc.id,
@@ -71,7 +72,7 @@ class OpenAIProvider(BaseLLMProvider):
                 payload: Dict[str, Any] = {
                     "model": self.model_name,
                     "messages": formatted_msgs,
-                    "max_tokens": 500,
+                    "max_tokens": 1200,
                 }
 
                 if tools:

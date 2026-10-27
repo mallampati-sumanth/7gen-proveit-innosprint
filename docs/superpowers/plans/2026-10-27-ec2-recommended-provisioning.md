@@ -84,7 +84,7 @@ Expected: PASS.
 
 **Interfaces:**
 - Displays transparent configuration summary (Region, `t3.micro` Free Tier, Port, Security Group).
-- Features dual-action: "⚡ Continue with Recommended Settings" vs Expandable "Customize Settings".
+- Features dual-action: " Continue with Recommended Settings" vs Expandable "Customize Settings".
 - Displays live SSE streaming audit trail of the boot sequence with step icons and real-time elapsed timestamps.
 
 - [ ] **Step 1: Add "Launch Recommended AWS EC2" trigger button**

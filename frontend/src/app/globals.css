@@ -11,9 +11,11 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.01em;
+  height: 100%;
+  overflow: hidden;
 }
 
-body { background: #ffffff; overflow: hidden; height: 100vh; }
+body { background: #ffffff; overflow: hidden; height: 100%; }
 
 /* Landing page overrides */
 body.sai {

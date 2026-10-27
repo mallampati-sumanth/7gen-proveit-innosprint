@@ -129,7 +129,7 @@ export const EC2ProvisionWizardModal = ({
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 16, fontWeight: 800, color: "var(--text-1)" }}>
-                {stage === "config" ? "⚡ Launch AWS EC2 Instance" : "⚡ AWS EC2 Boot-Up Audit Trail"}
+                {stage === "config" ? " Launch AWS EC2 Instance" : " AWS EC2 Boot-Up Audit Trail"}
               </span>
               <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: "rgba(22, 163, 74, 0.15)", color: "#16a34a", border: "1px solid rgba(22, 163, 74, 0.3)" }}>
                 AWS FREE TIER (t3.micro)
@@ -174,7 +174,7 @@ export const EC2ProvisionWizardModal = ({
               </div>
 
               <div style={{ fontSize: 11.5, color: "var(--text-3)", borderTop: "1px solid var(--border-soft)", paddingTop: 8 }}>
-                🔑 <strong>Zero-Setup Deploy Key:</strong> ProveIt injects a self-contained in-memory SSH deploy key via cloud-init. No pre-existing AWS key pairs required.
+                 <strong>Zero-Setup Deploy Key:</strong> ProveIt injects a self-contained in-memory SSH deploy key via cloud-init. No pre-existing AWS key pairs required.
               </div>
             </div>
 
@@ -309,7 +309,7 @@ export const EC2ProvisionWizardModal = ({
               }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: "var(--green)" }}>
-                    ✅ EC2 Instance Successfully Launched & Online!
+                     EC2 Instance Successfully Launched & Online!
                   </div>
                   <div style={{ fontSize: 11.5, color: "var(--text-2)", marginTop: 2, fontFamily: "JetBrains Mono, monospace" }}>
                     ID: {provisionedInst.instance_id} · Public IP: <strong>{provisionedInst.public_ip}</strong>
@@ -334,7 +334,7 @@ export const EC2ProvisionWizardModal = ({
                         background: "var(--orange)", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer",
                       }}
                     >
-                      🚀 Deploy {context.target_repo.split("/").pop()} Now ➔
+                       Deploy {context.target_repo.split("/").pop()} Now ➔
                     </button>
                   )}
                 </div>

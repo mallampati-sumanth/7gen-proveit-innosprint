@@ -42,7 +42,11 @@ export const ReposTab = ({
   const handleSyncAll = async () => {
     setSyncing(true);
     try {
-      const res = await fetch(`${API_BASE}/api/agent/github/sync-repos`, { method: "POST" });
+      const storedPat = (typeof window !== "undefined" ? localStorage.getItem("proveit_github_pat") : null) || "";
+      const syncUrl = storedPat
+        ? `${API_BASE}/api/agent/github/sync-repos?token=${encodeURIComponent(storedPat)}`
+        : `${API_BASE}/api/agent/github/sync-repos`;
+      const res = await fetch(syncUrl, { method: "POST" });
       if (!res.ok) {
         onOpenConnect();
       } else {
