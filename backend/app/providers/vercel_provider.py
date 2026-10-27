@@ -73,7 +73,7 @@ class VercelProvider(BaseCloudProvider):
                     "Content-Type": "application/json",
                 }
 
-                async with httpx.AsyncClient(timeout=35.0) as client:
+                async with httpx.AsyncClient(timeout=120.0) as client:
                     # 1. Fetch user & team info to correctly route deployments
                     u_res = await client.get("https://api.vercel.com/v2/user", headers=headers)
                     if u_res.status_code != 200:
@@ -245,8 +245,8 @@ class VercelProvider(BaseCloudProvider):
                             poll_url += f"?teamId={team_id}"
 
                         start_wait = time.time()
-                        while ready_state in ["INITIALIZING", "BUILDING", "QUEUED"] and (time.time() - start_wait) < 18:
-                            await asyncio.sleep(2.0)
+                        while ready_state in ["INITIALIZING", "BUILDING", "QUEUED"] and (time.time() - start_wait) < 85:
+                            await asyncio.sleep(2.5)
                             try:
                                 chk_res = await client.get(poll_url, headers=headers)
                                 if chk_res.status_code == 200:
@@ -307,10 +307,13 @@ class VercelProvider(BaseCloudProvider):
                         final_live_host = expected_alias or primary_alias or (aliases[0] if aliases else None) or data.get('url') or live_domain
                         final_live_url = f"https://{final_live_host}"
 
+                        is_building = ready_state in ["INITIALIZING", "BUILDING", "QUEUED"]
+                        deploy_status = "BUILDING" if is_building else "READY"
+
                         return DeploymentResult(
                             provider=self.name,
                             deployment_id=dpl_id,
-                            status="READY",
+                            status=deploy_status,
                             live_url=final_live_url,
                             preview_url=f"https://{data.get('url') or primary_alias or live_domain}",
                             build_logs=[
@@ -320,8 +323,12 @@ class VercelProvider(BaseCloudProvider):
                                 f"[Vercel Root Directory] Subfolder: '{clean_root or 'Root (/)'}'",
                                 f"[Vercel Environment] Target: {target_mode} (Injected {len(env_vars or {})} runtime variables)",
                                 f"[Vercel Deployment ID] {dpl_id}",
-                                f"[Vercel State] Deployment verified: {ready_state}",
-                                f"[Vercel Live Edge URL] {final_live_url}",
+                                f"[Vercel State] Deployment status: {ready_state}",
+                                *(
+                                    [f"[Vercel Edge Building] Build is currently compiling on edge. Live URL will activate as soon as bundling concludes."]
+                                    if is_building
+                                    else [f"[Vercel Live Edge URL] {final_live_url}"]
+                                ),
                                 f"[Vercel Dashboard & Logs] {inspector}",
                             ],
                             metadata={
@@ -387,7 +394,7 @@ class VercelProvider(BaseCloudProvider):
             },
         )
 
-    async def get_deployment_status(self, deployment_id: str) -> DeploymentResult:
+    async def get_deployment_status(self, deployment_id: str, repo_name: Optional[str] = None, **kwargs: Any) -> DeploymentResult:
         if await self.is_configured() and not deployment_id.startswith("dpl_mock"):
             try:
                 headers = {"Authorization": f"Bearer {self.token}"}
@@ -403,12 +410,15 @@ class VercelProvider(BaseCloudProvider):
                     if resp.status_code == 200:
                         data = resp.json()
                         state = data.get("readyState") or data.get("status") or "READY"
-                        alias = (data.get("alias") or [data.get("url")])[0]
+                        is_ready = state == "READY"
+                        status_str = "READY" if is_ready else ("FAILED" if state in ["ERROR", "CANCELED"] else "BUILDING")
+                        aliases = data.get("alias") or []
+                        primary = next((a for a in aliases if not "-git-" in a), aliases[0] if aliases else data.get("url"))
                         return DeploymentResult(
                             provider=self.name,
                             deployment_id=deployment_id,
-                            status=state,
-                            live_url=f"https://{alias}",
+                            status=status_str,
+                            live_url=f"https://{primary}" if primary else "",
                             build_logs=[f"Vercel Deployment State: {state}"],
                             metadata=data,
                         )

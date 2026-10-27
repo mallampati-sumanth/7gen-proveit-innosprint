@@ -83,7 +83,7 @@ class BaseCloudProvider(ABC):
             )
 
     @abstractmethod
-    async def get_deployment_status(self, deployment_id: str) -> DeploymentResult:
+    async def get_deployment_status(self, deployment_id: str, repo_name: Optional[str] = None, **kwargs: Any) -> DeploymentResult:
         """Fetches live build/deployment status from the provider."""
         pass
 

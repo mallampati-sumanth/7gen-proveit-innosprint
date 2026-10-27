@@ -118,7 +118,7 @@ class RailwayProvider(BaseCloudProvider):
             },
         )
 
-    async def get_deployment_status(self, deployment_id: str) -> DeploymentResult:
+    async def get_deployment_status(self, deployment_id: str, repo_name: Optional[str] = None, **kwargs: Any) -> DeploymentResult:
         return DeploymentResult(
             provider=self.name,
             deployment_id=deployment_id,

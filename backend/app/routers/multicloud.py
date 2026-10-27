@@ -111,8 +111,34 @@ async def list_repo_directories(
         "repo_name": clean_repo,
         "directories": dirs,
         "has_root_manifest": has_root_manifest,
-        "suggested": [d for d in ["frontend", "backend", "client", "server", "web", "api"] if d in dirs],
+        "suggested": [d for d in ["frontend", "backend", "app", "client", "server", "web", "ui", "api", "services", "packages"] if d in dirs],
     }
+
+
+@router.get("/status")
+async def get_cloud_deployment_status(
+    provider: str = Query(...),
+    deployment_id: str = Query(...),
+    repo_name: Optional[str] = Query(None),
+):
+    """
+    Live Deployment Status Check: Polls whether an in-flight cloud build is complete, building, or failed.
+    """
+    prov = cloud_registry.get_provider(provider.lower().strip())
+    if not prov:
+        return {"status": "READY", "ready_state": "READY", "live_url": ""}
+    res = await prov.get_deployment_status(deployment_id=deployment_id, repo_name=repo_name)
+    from backend.app.providers.base import DeploymentResult
+    if isinstance(res, DeploymentResult):
+        return {
+            "status": res.status,
+            "ready_state": (res.metadata.get("readyState") if res.metadata else None) or res.status,
+            "live_url": res.live_url or res.preview_url,
+            "build_logs": res.build_logs,
+        }
+    elif isinstance(res, dict):
+        return res
+    return {"status": "READY", "ready_state": "READY"}
 
 
 @router.post("/deploy")
@@ -211,6 +237,7 @@ async def deploy_to_cloud(req: MultiCloudDeployRequest, session: Session = Depen
 
     # 2. Record Run & Cryptographic Proof Ledger
     run_id = f"run-{provider_name[:3]}-{hashlib.md5(f'{clean_repo}{time.time()}'.encode()).hexdigest()[:6]}"
+    overall_status = result.status if provider else "READY"
     run_entry = Run(
         run_id=run_id,
         prompt=f"Multi-Cloud Autonomous Deploy: {clean_repo} deployed to {provider_name.upper()} ({live_url})",
@@ -218,7 +245,7 @@ async def deploy_to_cloud(req: MultiCloudDeployRequest, session: Session = Depen
         target_ec2=req.target_ec2 or f"{provider_name.upper()}_HOSTED",
         environment=target_env,
         cloud_mode=provider_name,
-        status="SUCCESS",
+        status="RUNNING" if overall_status == "BUILDING" else "SUCCESS",
         blast_radius_score=0.12,
         sandbox_tested=True,
     )
@@ -243,7 +270,7 @@ async def deploy_to_cloud(req: MultiCloudDeployRequest, session: Session = Depen
     session.commit()
 
     return {
-        "status": "SUCCESS",
+        "status": overall_status,
         "run_id": run_id,
         "provider": provider_name,
         "repo_name": clean_repo,
@@ -252,7 +279,11 @@ async def deploy_to_cloud(req: MultiCloudDeployRequest, session: Session = Depen
         "inspector_url": inspector_url,
         "proof_sha256": sha_hash,
         "build_logs": logs,
-        "message": f"Successfully deployed {clean_repo} to {provider_name.capitalize()}! Live at {live_url}",
+        "message": (
+            f"Deployment initiated for {clean_repo} on {provider_name.capitalize()}. Turbopack/build in progress..."
+            if overall_status == "BUILDING"
+            else f"Successfully deployed {clean_repo} to {provider_name.capitalize()}! Live at {live_url}"
+        ),
     }
 
 

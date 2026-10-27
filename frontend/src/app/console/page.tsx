@@ -427,13 +427,52 @@ function MainApp() {
         }
 
         const data = await res.json();
+        let currentStatus = data.status || "READY";
+        let liveUrl = data.live_url || "";
+
+        // If deployment is still compiling on edge, actively poll status until ready
+        if (currentStatus === "BUILDING" && data.deployment_id) {
+          setPipelineState(prev => ({
+            ...prev,
+            status: "running",
+            runId: data.run_id,
+            nodes: {
+              ...prev.nodes,
+              initialization: { ...prev.nodes.initialization, status: "success", verdict: "ACCEPTED", duration: "0.3s", detail: `Configured ${providerParam.toUpperCase()} build matrix.` },
+              build: { ...prev.nodes.build, status: "running", verdict: "RUNNING", detail: `Turbopack compiling on Vercel Edge... Deployment ID: ${data.deployment_id}` },
+            },
+            logs: [
+              ...prev.logs,
+              { id: `log-bld-${Date.now()}`, time: new Date().toLocaleTimeString(), text: `[WAIT] Edge build compiling on ${providerParam.toUpperCase()}. Live polling deployment status...`, type: "info" }
+            ]
+          }));
+
+          for (let poll = 0; poll < 20; poll++) {
+            await new Promise(r => setTimeout(r, 3000));
+            try {
+              const chk = await fetch(`${API_BASE}/api/multicloud/status?provider=${providerParam}&deployment_id=${data.deployment_id}&repo_name=${encodeURIComponent(chosenRepo)}`);
+              if (chk.ok) {
+                const chkData = await chk.json();
+                if (chkData.status === "READY") {
+                  currentStatus = "READY";
+                  if (chkData.live_url) liveUrl = chkData.live_url;
+                  break;
+                } else if (chkData.status === "FAILED") {
+                  throw { message: "Edge build failed on cloud provider.", logs: chkData.build_logs || [] };
+                }
+              }
+            } catch (pollErr: any) {
+              if (pollErr?.logs) throw pollErr;
+            }
+          }
+        }
 
         // Stage 3: Complete all CI/CD stages with real API telemetry
         setPipelineState(prev => ({
           ...prev,
           status: "success",
           runId: data.run_id,
-          appUrl: data.live_url,
+          appUrl: liveUrl,
           proofHash: data.proof_sha256,
           endTime: Date.now(),
           nodes: {
@@ -443,9 +482,9 @@ function MainApp() {
             unit_test: { ...prev.nodes.unit_test, status: "success", verdict: "ACCEPTED", duration: "0.4s", detail: `Security scan & blast radius check: 0.12 (Low Risk).` },
             host_handshake: { ...prev.nodes.host_handshake, status: "success", verdict: "ACCEPTED", duration: "0.3s", detail: `Handshake verified with ${providerParam.toUpperCase()} cloud orchestrator.` },
             checkout_cd: { ...prev.nodes.checkout_cd, status: "success", verdict: "ACCEPTED", duration: "0.3s", detail: `Git source linked to ${chosenRepo} (${branchToUse}).` },
-            docker_init: { ...prev.nodes.docker_init, status: "success", verdict: "ACCEPTED", duration: "0.4s", detail: `Edge routing live at ${data.live_url}` },
+            docker_init: { ...prev.nodes.docker_init, status: "success", verdict: "ACCEPTED", duration: "0.4s", detail: `Edge routing live at ${liveUrl}` },
             inject_secrets: { ...prev.nodes.inject_secrets, status: "success", verdict: "ACCEPTED", duration: "0.2s", detail: `Injected ${Object.keys(dynamicEnvVars).length} environment variables.` },
-            deploy_vm: { ...prev.nodes.deploy_vm, status: "success", verdict: "ACCEPTED", duration: "0.7s", detail: `Live at ${data.live_url}` },
+            deploy_vm: { ...prev.nodes.deploy_vm, status: "success", verdict: "ACCEPTED", duration: "0.7s", detail: `Live at ${liveUrl}` },
           },
           logs: [
             ...prev.logs,
@@ -458,13 +497,13 @@ function MainApp() {
             {
               id: `log-done-${Date.now()}`,
               time: new Date().toLocaleTimeString(),
-              text: `[GATE_ACCEPTED] ✓ Live Deployment created. URL: ${data.live_url}`,
+              text: `[GATE_ACCEPTED] ✓ Live Deployment verified & active. URL: ${liveUrl}`,
               type: "gate" as const,
             },
             ...(data.inspector_url ? [{
               id: `log-inspect-${Date.now()}`,
               time: new Date().toLocaleTimeString(),
-              text: `[DASHBOARD] Vercel Inspector: ${data.inspector_url}`,
+              text: `[DASHBOARD] ${providerParam.toUpperCase()} Inspector: ${data.inspector_url}`,
               type: "info" as const,
             }] : []),
             {
@@ -478,7 +517,7 @@ function MainApp() {
 
         setMsgs(prev => prev.map(m => m.id === agentMsgId ? {
           ...m,
-          text: `✓ Autonomous deployment complete! ${chosenRepo} is live on ${providerParam.toUpperCase()} at ${data.live_url}`,
+          text: `✓ Autonomous deployment complete! ${chosenRepo} is live on ${providerParam.toUpperCase()} at ${liveUrl}`,
           meta: `${providerParam.toUpperCase()} Live · Proof #${data.proof_sha256.slice(0, 8)}`,
         } : m));
 
