@@ -83,7 +83,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme }) => {
     render: "",
     railway: "",
     github: "",
+    aws_access_key: "",
+    aws_secret_key: "",
   });
+
+  const [testingAWS, setTestingAWS] = useState(false);
+  const [awsTestResult, setAwsTestResult] = useState<{ status: string; message: string } | null>(null);
 
   // Safety & SRE Policy
   const [blastRadiusStrict, setBlastRadiusStrict] = useState(true);
@@ -135,12 +140,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme }) => {
             railway: !!data.railway_configured,
           });
 
+          if (data.aws_access_key_id) {
+            setAwsAccessKey(data.aws_access_key_id);
+          }
+
           setTokenPreviews({
             vercel: data.vercel_preview || "",
             netlify: data.netlify_preview || "",
             render: data.render_preview || "",
             railway: data.railway_preview || "",
             github: data.github_preview || "",
+            aws_access_key: data.aws_access_key_preview || "",
+            aws_secret_key: data.aws_secret_key_preview || "",
           });
         }
       } catch (err) {
@@ -196,14 +207,23 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme }) => {
       }));
 
       if (res?.settings) {
+        if (res.settings.aws_access_key_id) {
+          setAwsAccessKey(res.settings.aws_access_key_id);
+        }
         setTokenPreviews({
           vercel: res.settings.vercel_preview || "",
           netlify: res.settings.netlify_preview || "",
           render: res.settings.render_preview || "",
           railway: res.settings.railway_preview || "",
           github: res.settings.github_preview || "",
+          aws_access_key: res.settings.aws_access_key_preview || "",
+          aws_secret_key: res.settings.aws_secret_key_preview || "",
         });
+        if (typeof res.settings.aws_configured === "boolean") {
+          setConfiguredStatus((prev) => ({ ...prev, aws: res.settings.aws_configured }));
+        }
       }
+      setAwsSecretKey("");
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
@@ -211,6 +231,48 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme }) => {
       alert(err.message || "Failed to update platform settings.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Test AWS Connection
+  const handleTestAWS = async () => {
+    setTestingAWS(true);
+    setAwsTestResult(null);
+    try {
+      if (awsAccessKey.trim() || awsSecretKey.trim()) {
+        await apiRequest("/api/settings", {
+          method: "POST",
+          body: JSON.stringify({
+            cloud_mode: cloudMode,
+            aws_region: awsRegion,
+            aws_access_key_id: awsAccessKey.trim() || undefined,
+            aws_secret_access_key: awsSecretKey.trim() || undefined,
+          }),
+        });
+      }
+      const res = (await apiRequest("/api/agent/test-connection", {
+        method: "POST",
+        body: JSON.stringify({ provider: "aws" }),
+      })) as any;
+      if (res?.status === "ok") {
+        setAwsTestResult({
+          status: "success",
+          message: res.message || "AWS credentials verified & authenticated!",
+        });
+        setConfiguredStatus((prev) => ({ ...prev, aws: true }));
+      } else {
+        setAwsTestResult({
+          status: "error",
+          message: res?.message || "AWS authentication failed. Please check credentials.",
+        });
+      }
+    } catch (err: any) {
+      setAwsTestResult({
+        status: "error",
+        message: err.message || "Failed to reach AWS endpoint.",
+      });
+    } finally {
+      setTestingAWS(false);
     }
   };
 
@@ -647,6 +709,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme }) => {
                     <span>Amazon Web Services (AWS EC2)</span>
                     <span style={{
                       fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 99,
+                      background: configuredStatus.aws ? "rgba(22, 163, 74, 0.12)" : "rgba(234, 179, 8, 0.12)",
+                      color: configuredStatus.aws ? "#16a34a" : "#ca8a04",
+                      border: `1px solid ${configuredStatus.aws ? "rgba(22, 163, 74, 0.3)" : "rgba(234, 179, 8, 0.3)"}`,
+                    }}>
+                      {configuredStatus.aws ? "CONFIGURED & STORED" : "CREDENTIALS NEEDED"}
+                    </span>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 99,
                       background: cloudMode === "aws" ? "rgba(245, 158, 11, 0.15)" : "rgba(100, 116, 139, 0.15)",
                       color: cloudMode === "aws" ? "#f59e0b" : "var(--text-3)",
                       border: `1px solid ${cloudMode === "aws" ? "rgba(245, 158, 11, 0.3)" : "var(--border)"}`,
@@ -689,34 +759,60 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme }) => {
                   <label style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text-3)", display: "block", marginBottom: 6 }}>
                     AWS Access Key ID
                   </label>
-                  <input
-                    type={visibleKeys["aws_id"] ? "text" : "password"}
-                    placeholder={configuredStatus.aws ? "AWS key configured in .env" : "Enter AKIA..."}
-                    value={awsAccessKey}
-                    onChange={(e) => setAwsAccessKey(e.target.value)}
-                    style={{
-                      width: "100%", padding: "9px 12px", borderRadius: 8,
-                      background: "var(--bg-input)", color: "var(--text-1)", border: "1px solid var(--border)",
-                      fontSize: 12.5, fontFamily: "JetBrains Mono, monospace", outline: "none", boxSizing: "border-box",
-                    }}
-                  />
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={visibleKeys["aws_id"] ? "password" : "text"}
+                      placeholder="Enter AKIA..."
+                      value={awsAccessKey}
+                      onChange={(e) => setAwsAccessKey(e.target.value)}
+                      style={{
+                        width: "100%", padding: "9px 38px 9px 12px", borderRadius: 8,
+                        background: "var(--bg-input)", color: "var(--text-1)", border: "1px solid var(--border)",
+                        fontSize: 12.5, fontFamily: "JetBrains Mono, monospace", outline: "none", boxSizing: "border-box",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => toggleVisibility("aws_id")}
+                      style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-3)", cursor: "pointer" }}
+                    >
+                      {visibleKeys["aws_id"] ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                  {tokenPreviews.aws_access_key && (
+                    <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
+                      Stored in .env: <code>{tokenPreviews.aws_access_key}</code>
+                    </div>
+                  )}
                 </div>
 
                 <div>
                   <label style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text-3)", display: "block", marginBottom: 6 }}>
                     AWS Secret Access Key
                   </label>
-                  <input
-                    type={visibleKeys["aws_sec"] ? "text" : "password"}
-                    placeholder={configuredStatus.aws ? "AWS secret active in .env" : "Enter AWS Secret Key"}
-                    value={awsSecretKey}
-                    onChange={(e) => setAwsSecretKey(e.target.value)}
-                    style={{
-                      width: "100%", padding: "9px 12px", borderRadius: 8,
-                      background: "var(--bg-input)", color: "var(--text-1)", border: "1px solid var(--border)",
-                      fontSize: 12.5, fontFamily: "JetBrains Mono, monospace", outline: "none", boxSizing: "border-box",
-                    }}
-                  />
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={visibleKeys["aws_sec"] ? "text" : "password"}
+                      placeholder={tokenPreviews.aws_secret_key ? `Active: ${tokenPreviews.aws_secret_key} (Enter new to replace)` : "Enter AWS Secret Key"}
+                      value={awsSecretKey}
+                      onChange={(e) => setAwsSecretKey(e.target.value)}
+                      style={{
+                        width: "100%", padding: "9px 38px 9px 12px", borderRadius: 8,
+                        background: "var(--bg-input)", color: "var(--text-1)", border: "1px solid var(--border)",
+                        fontSize: 12.5, fontFamily: "JetBrains Mono, monospace", outline: "none", boxSizing: "border-box",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => toggleVisibility("aws_sec")}
+                      style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-3)", cursor: "pointer" }}
+                    >
+                      {visibleKeys["aws_sec"] ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
+                    {tokenPreviews.aws_secret_key ? `Active: ${tokenPreviews.aws_secret_key} · Leave empty to keep unchanged` : "Never exposed in plaintext"}
+                  </div>
                 </div>
               </div>
 
@@ -738,6 +834,33 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ theme }) => {
                   <option value="ap-south-1">ap-south-1 (Mumbai)</option>
                   <option value="eu-west-1">eu-west-1 (Ireland)</option>
                 </select>
+              </div>
+
+              {/* AWS Test Connection Button */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={handleTestAWS}
+                  disabled={testingAWS}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8,
+                    background: "var(--bg-card2)", border: "1px solid var(--border)",
+                    color: "var(--text-1)", fontSize: 12, fontWeight: 600, cursor: testingAWS ? "not-allowed" : "pointer"
+                  }}
+                >
+                  <Activity size={14} className={testingAWS ? "animate-spin" : ""} />
+                  {testingAWS ? "Testing AWS STS..." : "Test AWS Credentials"}
+                </button>
+                {awsTestResult && (
+                  <div style={{
+                    fontSize: 12, fontWeight: 600,
+                    color: awsTestResult.status === "success" ? "#16a34a" : "#ef4444",
+                    display: "flex", alignItems: "center", gap: 6
+                  }}>
+                    {awsTestResult.status === "success" ? <Check size={14} /> : <AlertTriangle size={14} />}
+                    {awsTestResult.message}
+                  </div>
+                )}
               </div>
             </div>
 

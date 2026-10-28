@@ -1,4 +1,4 @@
-export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+export const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
 let authToken: string | null = null;
 
@@ -23,13 +23,15 @@ export async function apiRequest<T>(endpoint: string, options: RequestOptions = 
     url += `?${searchParams.toString()}`;
   }
 
+  const activeToken = authToken || (typeof window !== "undefined" ? localStorage.getItem("proveit_token") : null);
+
   const reqHeaders: Record<string, string> = {
     "Content-Type": "application/json",
     ...(headers as Record<string, string>),
   };
 
-  if (authToken) {
-    reqHeaders["Authorization"] = `Bearer ${authToken}`;
+  if (activeToken) {
+    reqHeaders["Authorization"] = `Bearer ${activeToken}`;
   }
 
   const response = await fetch(url, {

@@ -42,9 +42,21 @@ def persist_env_vars(updates: Dict[str, str]):
     if not updates:
         return
     try:
-        env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.env"))
-        if not os.path.exists(env_path):
-            return
+        candidate_paths = [
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.env")),
+            os.path.abspath(".env"),
+            os.path.abspath(os.path.join(os.getcwd(), ".env")),
+        ]
+        env_path = None
+        for p in candidate_paths:
+            if os.path.exists(p):
+                env_path = p
+                break
+        if not env_path:
+            env_path = candidate_paths[0]
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.write("# ProveIt Environment Configuration\n")
+
         with open(env_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
@@ -54,7 +66,8 @@ def persist_env_vars(updates: Dict[str, str]):
             line_clean = line.rstrip("\r\n")
             matched = False
             for key, val in updates.items():
-                if line_clean.startswith(f"{key}=") or line_clean.startswith(f"#{key}="):
+                stripped = line_clean.strip()
+                if stripped.startswith(f"{key}=") or stripped.startswith(f"#{key}="):
                     new_lines.append(f"{key}={val}\n")
                     remaining_keys.discard(key)
                     matched = True
@@ -67,7 +80,7 @@ def persist_env_vars(updates: Dict[str, str]):
             val = updates[key]
             new_lines.append(f"{key}={val}\n")
 
-        with open(env_path, "w", encoding="utf-8") as f:
+        with open(env_path, "w", encoding="utf-8", newline="") as f:
             f.writelines(new_lines)
     except Exception as e:
         print(f"[Settings Persist Error] Failed to write to .env: {e}")
@@ -112,11 +125,18 @@ def get_platform_settings() -> Dict[str, Any]:
     r_tok = settings.RENDER_API_KEY or os.environ.get("RENDER_API_KEY")
     rw_tok = settings.RAILWAY_TOKEN or os.environ.get("RAILWAY_TOKEN")
     gh_tok = settings.GITHUB_TOKEN or os.environ.get("GITHUB_TOKEN")
+    aws_k = settings.AWS_ACCESS_KEY_ID or os.environ.get("AWS_ACCESS_KEY_ID", "")
+    aws_s = settings.AWS_SECRET_ACCESS_KEY or os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+    aws_valid = bool(aws_k and not str(aws_k).startswith("your_") and aws_s and not str(aws_s).startswith("your_"))
 
     return {
         **RUNTIME_SETTINGS,
         "cloud_mode": settings.CLOUD_MODE,
         "aws_region": settings.AWS_REGION,
+        "aws_access_key_id": aws_k if aws_k and not str(aws_k).startswith("your_") else "",
+        "aws_access_key_preview": mask_secret(aws_k),
+        "aws_secret_key_preview": mask_secret(aws_s),
+        "aws_configured": aws_valid,
         "max_managed_instances": settings.MAX_MANAGED_INSTANCES,
         "chaos_enabled": settings.CHAOS_ENABLED,
         "max_agent_steps": settings.MAX_AGENT_STEPS,
@@ -133,7 +153,6 @@ def get_platform_settings() -> Dict[str, Any]:
         ),
         "github_configured": bool(gh_tok),
         "github_preview": mask_secret(gh_tok),
-        "aws_configured": bool((settings.AWS_ACCESS_KEY_ID or os.environ.get("AWS_ACCESS_KEY_ID")) and (settings.AWS_SECRET_ACCESS_KEY or os.environ.get("AWS_SECRET_ACCESS_KEY"))),
         "openai_configured": bool(settings.OPENAI_API_KEY or os.environ.get("OPENAI_API_KEY")),
         "gemini_configured": bool(settings.GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY")),
         "sarvam_configured": bool(settings.SARVAM_API_KEY and not settings.SARVAM_API_KEY.startswith("your_")),
@@ -170,20 +189,25 @@ def update_platform_settings(req: SettingsUpdateRequest) -> Dict[str, Any]:
 
     if req.aws_region is not None:
         reg = req.aws_region.strip()
-        settings.AWS_REGION = reg
-        env_updates["AWS_REGION"] = reg
+        if reg:
+            settings.AWS_REGION = reg
+            os.environ["AWS_REGION"] = reg
+            os.environ["AWS_DEFAULT_REGION"] = reg
+            env_updates["AWS_REGION"] = reg
 
     if req.aws_access_key_id is not None:
         key = req.aws_access_key_id.strip()
-        settings.AWS_ACCESS_KEY_ID = key
-        os.environ["AWS_ACCESS_KEY_ID"] = key
-        env_updates["AWS_ACCESS_KEY_ID"] = key
+        if key:
+            settings.AWS_ACCESS_KEY_ID = key
+            os.environ["AWS_ACCESS_KEY_ID"] = key
+            env_updates["AWS_ACCESS_KEY_ID"] = key
 
     if req.aws_secret_access_key is not None:
         key = req.aws_secret_access_key.strip()
-        settings.AWS_SECRET_ACCESS_KEY = key
-        os.environ["AWS_SECRET_ACCESS_KEY"] = key
-        env_updates["AWS_SECRET_ACCESS_KEY"] = key
+        if key:
+            settings.AWS_SECRET_ACCESS_KEY = key
+            os.environ["AWS_SECRET_ACCESS_KEY"] = key
+            env_updates["AWS_SECRET_ACCESS_KEY"] = key
 
     if req.github_token is not None:
         token = req.github_token.strip()

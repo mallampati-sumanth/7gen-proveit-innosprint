@@ -54,3 +54,27 @@ def test_settings_api_get_and_update():
 
     # Restore setting
     client.post("/api/settings", json={"max_container_memory_mb": 1024})
+
+
+def test_settings_aws_credentials_storing():
+    """Verify that AWS Access Key ID, Secret Key, and Region store and retrieve properly."""
+    res = client.get("/api/settings")
+    assert res.status_code == 200
+    data = res.json()
+    assert "aws_configured" in data
+    assert "aws_access_key_id" in data
+    assert "aws_access_key_preview" in data
+    assert "aws_secret_key_preview" in data
+
+    # Update with credentials
+    up_res = client.post("/api/settings", json={
+        "aws_region": "us-east-1",
+        "aws_access_key_id": "AKIAXSVLTBTDT3GVIBPA",
+        "aws_secret_access_key": "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",
+    })
+    assert up_res.status_code == 200
+    u_data = up_res.json()
+    assert u_data["status"] == "success"
+    assert u_data["settings"]["aws_configured"] is True
+    assert u_data["settings"]["aws_access_key_id"] == "AKIAXSVLTBTDT3GVIBPA"
+    assert "AKIA" in u_data["settings"]["aws_access_key_preview"]
