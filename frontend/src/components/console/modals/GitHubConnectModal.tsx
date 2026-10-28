@@ -6,10 +6,12 @@ export const GitHubConnectModal = ({
   open,
   onClose,
   onConnected,
+  username,
 }: {
   open: boolean;
   onClose: () => void;
   onConnected: () => void;
+  username?: string;
 }) => {
   const [token, setToken] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,17 +20,21 @@ export const GitHubConnectModal = ({
 
   useEffect(() => {
     if (open && typeof window !== "undefined") {
-      const saved = localStorage.getItem("proveit_github_pat") || "";
-      if (saved) setToken(saved);
+      const userKey = username ? `proveit_github_pat_${username}` : "proveit_github_pat";
+      const saved = localStorage.getItem(userKey) || (username === "admin" ? localStorage.getItem("proveit_github_pat") : "") || "";
+      setToken(saved);
       setError(null);
       setSuccess(null);
     }
-  }, [open]);
+  }, [open, username]);
 
   if (!open) return null;
 
   const handleDisconnect = () => {
     if (typeof window !== "undefined") {
+      if (username) {
+        localStorage.removeItem(`proveit_github_pat_${username}`);
+      }
       localStorage.removeItem("proveit_github_pat");
     }
     setToken("");
@@ -50,9 +56,15 @@ export const GitHubConnectModal = ({
     setSuccess(null);
 
     try {
+      const jwtToken = typeof window !== "undefined" ? localStorage.getItem("proveit_token") : "";
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (jwtToken) {
+        headers["Authorization"] = `Bearer ${jwtToken}`;
+      }
+
       const res = await fetch(`${API_BASE}/api/agent/github/connect`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ token: cleanTok }),
       });
       const data = await res.json();
@@ -60,8 +72,11 @@ export const GitHubConnectModal = ({
         throw new Error(data.detail || "Failed to authenticate with GitHub API.");
       }
 
-      // Persist PAT in localStorage so refresh never loses the connected profile
+      // Persist PAT in user-specific localStorage so refresh never loses the connected profile
       if (typeof window !== "undefined") {
+        if (username) {
+          localStorage.setItem(`proveit_github_pat_${username}`, cleanTok);
+        }
         localStorage.setItem("proveit_github_pat", cleanTok);
       }
 

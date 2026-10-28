@@ -58,6 +58,7 @@ def init_db() -> None:
                     ("phone_verified", "BOOLEAN DEFAULT 0"),
                     ("voice_pin", "VARCHAR DEFAULT '1234'"),
                     ("voice_enabled", "BOOLEAN DEFAULT 1"),
+                    ("github_pat", "VARCHAR"),
                 ]
                 for col_name, col_def in cols_to_add:
                     if col_name not in existing_cols:
@@ -97,6 +98,7 @@ def init_db() -> None:
                 conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN DEFAULT FALSE;'))
                 conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS voice_pin VARCHAR DEFAULT \'1234\';'))
                 conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS voice_enabled BOOLEAN DEFAULT TRUE;'))
+                conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS github_pat VARCHAR;'))
                 conn.execute(text('ALTER TABLE "run" ADD COLUMN IF NOT EXISTS target_ec2 VARCHAR;'))
                 conn.execute(text('ALTER TABLE "run" ADD COLUMN IF NOT EXISTS environment VARCHAR DEFAULT \'production\';'))
                 conn.execute(text('ALTER TABLE "run" ADD COLUMN IF NOT EXISTS injected_env_json VARCHAR DEFAULT \'{}\';'))

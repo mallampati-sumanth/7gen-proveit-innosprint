@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 logger = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from sqlmodel import Session, select, func, or_
 # Ensure model package is importable
@@ -29,6 +30,7 @@ from backend.app.entities.models import (
     RepoEnvVar,
     EC2Instance,
     BenchmarkResult,
+    User,
     encrypt_secret,
     decrypt_secret,
 )
@@ -36,6 +38,24 @@ from backend.app.entities.models import (
 from proveit_model import ProveItAgent, GitHubTools, AWSTools
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
+security = HTTPBearer(auto_error=False)
+
+
+def _get_authenticated_user(credentials: Optional[HTTPAuthorizationCredentials], session: Session) -> Optional[User]:
+    if not credentials or not credentials.credentials:
+        return None
+    try:
+        try:
+            import jwt
+        except ImportError:
+            from jose import jwt
+        payload = jwt.decode(credentials.credentials, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        username = payload.get("sub")
+        if username:
+            return session.exec(select(User).where(User.username == username)).first()
+    except Exception:
+        pass
+    return None
 
 def get_active_agent_instance() -> ProveItAgent:
     active_key = settings.GEMINI_API_KEY if settings.LLM_PROVIDER == "gemini" else (
@@ -155,10 +175,27 @@ class ChatRequest(BaseModel):
 
 # ─────────── GITHUB PROFILE & REPOSITORIES ───────────
 @router.get("/github/profile")
-def get_github_profile(token: Optional[str] = None):
+def get_github_profile(
+    token: Optional[str] = None,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    session: Session = Depends(get_session),
+):
     """Fetch real GitHub user profile details via GitHub REST API."""
     cleaned_token = (token or "").strip()
-    if cleaned_token and cleaned_token != settings.GITHUB_TOKEN:
+    user = _get_authenticated_user(credentials, session)
+
+    use_token = ""
+    if cleaned_token:
+        use_token = cleaned_token
+    elif user and user.github_pat:
+        use_token = decrypt_secret(user.github_pat)
+    elif user and user.is_admin and settings.GITHUB_TOKEN and not settings.GITHUB_TOKEN.startswith("ghp_your"):
+        use_token = settings.GITHUB_TOKEN
+
+    if not use_token:
+        return {"connected": False, "message": "No GitHub account connected."}
+
+    if cleaned_token and user and user.is_admin and cleaned_token != settings.GITHUB_TOKEN:
         settings.GITHUB_TOKEN = cleaned_token
         os.environ["GITHUB_TOKEN"] = cleaned_token
         github_tools.token = cleaned_token
@@ -166,13 +203,16 @@ def get_github_profile(token: Optional[str] = None):
         if hasattr(agent_instance, "executor") and hasattr(agent_instance.executor, "github"):
             agent_instance.executor.github.token = cleaned_token
 
-    use_token = cleaned_token or settings.GITHUB_TOKEN
     return github_tools.get_user_profile(token=use_token)
 
 
 @router.post("/github/connect")
-def connect_github_account(req: GitHubConnectRequest, session: Session = Depends(get_session)):
-    """Validate GitHub token, update settings, and sync real user repos from GitHub API."""
+def connect_github_account(
+    req: GitHubConnectRequest,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    session: Session = Depends(get_session)
+):
+    """Validate GitHub token, save to user account, and sync real user repos from GitHub API."""
     tok = req.token.strip()
     profile = github_tools.get_user_profile(token=tok)
     if not profile.get("connected"):
@@ -181,34 +221,25 @@ def connect_github_account(req: GitHubConnectRequest, session: Session = Depends
             detail=profile.get("message", "Invalid GitHub Personal Access Token or unable to authenticate with GitHub API.")
         )
 
-    # Update active token
-    settings.GITHUB_TOKEN = tok
-    os.environ["GITHUB_TOKEN"] = tok
-    github_tools.token = tok
-    agent_instance.github.token = tok
-    if hasattr(agent_instance, "executor") and hasattr(agent_instance.executor, "github"):
-        agent_instance.executor.github.token = tok
+    user = _get_authenticated_user(credentials, session)
+    if user:
+        user.github_pat = encrypt_secret(tok)
+        user.github_username = profile.get("login") or profile.get("username")
+        user.github_id = str(profile.get("id") or "")
+        if profile.get("avatar_url"):
+            user.avatar_url = profile.get("avatar_url")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
 
-    # Persist the user token to .env file so it never reverts on reload
-    try:
-        env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.env"))
-        if os.path.exists(env_path):
-            with open(env_path, "r", encoding="utf-8") as f:
-                env_lines = f.readlines()
-            new_lines = []
-            replaced = False
-            for line in env_lines:
-                if line.startswith("GITHUB_TOKEN="):
-                    new_lines.append(f"GITHUB_TOKEN={tok}\n")
-                    replaced = True
-                else:
-                    new_lines.append(line)
-            if not replaced:
-                new_lines.append(f"\nGITHUB_TOKEN={tok}\n")
-            with open(env_path, "w", encoding="utf-8") as f:
-                f.writelines(new_lines)
-    except Exception:
-        pass
+    # If demo admin, synchronize to server settings
+    if user and user.is_admin:
+        settings.GITHUB_TOKEN = tok
+        os.environ["GITHUB_TOKEN"] = tok
+        github_tools.token = tok
+        agent_instance.github.token = tok
+        if hasattr(agent_instance, "executor") and hasattr(agent_instance.executor, "github"):
+            agent_instance.executor.github.token = tok
 
     # Sync real user repositories into the database
     real_repos = github_tools.list_user_repositories(token=tok, per_page=100, fetch_all=True)
@@ -219,6 +250,7 @@ def connect_github_account(req: GitHubConnectRequest, session: Session = Depends
         if not existing:
             new_r = RepoConfig(
                 repo_id=repo_id,
+                user_id=user.user_id if user else None,
                 repo_name=r.get("repo_name", repo_id.split("/")[-1]),
                 owner=r.get("owner", ""),
                 description=r.get("description", "GitHub repository"),
@@ -230,6 +262,8 @@ def connect_github_account(req: GitHubConnectRequest, session: Session = Depends
             session.add(new_r)
             synced_count += 1
         else:
+            if user:
+                existing.user_id = user.user_id
             existing.repo_name = r.get("repo_name", existing.repo_name)
             existing.owner = r.get("owner", existing.owner)
             existing.description = r.get("description", existing.description)
@@ -289,58 +323,74 @@ def sync_github_repositories(token: Optional[str] = None, session: Session = Dep
 
 
 @router.get("/repos")
-def list_repositories(owner: Optional[str] = None, token: Optional[str] = None, session: Session = Depends(get_session)):
+def list_repositories(
+    owner: Optional[str] = None,
+    token: Optional[str] = None,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    session: Session = Depends(get_session)
+):
     """List connected GitHub repositories from the database for the active user across all pages."""
     cleaned_token = (token or "").strip()
-    if cleaned_token and cleaned_token != settings.GITHUB_TOKEN:
-        settings.GITHUB_TOKEN = cleaned_token
-        os.environ["GITHUB_TOKEN"] = cleaned_token
-        github_tools.token = cleaned_token
-        agent_instance.github.token = cleaned_token
-        if hasattr(agent_instance, "executor") and hasattr(agent_instance.executor, "github"):
-            agent_instance.executor.github.token = cleaned_token
+    user = _get_authenticated_user(credentials, session)
 
-    active_tok = cleaned_token or settings.GITHUB_TOKEN
-    profile = github_tools.get_user_profile(token=active_tok)
-    connected_login = (profile.get("login") or "").strip().lower()
+    active_tok = ""
+    if cleaned_token:
+        active_tok = cleaned_token
+    elif user and user.github_pat:
+        active_tok = decrypt_secret(user.github_pat)
+    elif user and user.is_admin and settings.GITHUB_TOKEN and not settings.GITHUB_TOKEN.startswith("ghp_your"):
+        active_tok = settings.GITHUB_TOKEN
+
+    connected_login = ""
+    if active_tok:
+        profile = github_tools.get_user_profile(token=active_tok)
+        connected_login = (profile.get("login") or "").strip().lower()
+
     req_owner = owner.strip().lower() if isinstance(owner, str) and owner.strip() else None
 
     # Check total repo count in DB
     total_in_db = session.exec(select(func.count(RepoConfig.id))).one()
 
-    # If database has fewer than 100 repos and we have an active token, auto-sync all pages from GitHub
-    if total_in_db < 100 and active_tok and not active_tok.startswith("ghp_demo") and not active_tok.startswith("ghp_your"):
-        try:
-            real_repos = github_tools.list_user_repositories(token=active_tok, fetch_all=True)
-            for r in real_repos:
-                repo_id = r["name"]
-                existing = session.exec(select(RepoConfig).where(RepoConfig.repo_id == repo_id)).first()
-                if not existing:
-                    new_r = RepoConfig(
-                        repo_id=repo_id,
-                        repo_name=r.get("repo_name", repo_id.split("/")[-1]),
-                        owner=r.get("owner", ""),
-                        description=r.get("description", "GitHub repository"),
-                        language=r.get("language", "Other"),
-                        default_branch=r.get("default_branch", "main"),
-                        clone_url=r.get("clone_url"),
-                        is_connected=True,
-                    )
-                    session.add(new_r)
-                else:
-                    existing.repo_name = r.get("repo_name", existing.repo_name)
-                    existing.owner = r.get("owner", existing.owner)
-                    existing.description = r.get("description", existing.description)
-                    existing.language = r.get("language", existing.language)
-                    existing.default_branch = r.get("default_branch", existing.default_branch)
-                    existing.clone_url = r.get("clone_url", existing.clone_url)
-                    existing.is_connected = True
-                    session.add(existing)
-            session.commit()
-        except Exception as e:
-            logger.warning(f"Auto-sync repos in list_repositories encountered: {e}")
+    # If user has an active token and fewer than 100 repos, auto-sync from GitHub
+    if active_tok and not active_tok.startswith("ghp_demo") and not active_tok.startswith("ghp_your"):
+        user_repo_count = session.exec(select(func.count(RepoConfig.id)).where(RepoConfig.user_id == user.user_id)).one() if user else total_in_db
+        if user_repo_count < 100:
+            try:
+                real_repos = github_tools.list_user_repositories(token=active_tok, fetch_all=True)
+                for r in real_repos:
+                    repo_id = r["name"]
+                    existing = session.exec(select(RepoConfig).where(RepoConfig.repo_id == repo_id)).first()
+                    if not existing:
+                        new_r = RepoConfig(
+                            repo_id=repo_id,
+                            user_id=user.user_id if user else None,
+                            repo_name=r.get("repo_name", repo_id.split("/")[-1]),
+                            owner=r.get("owner", ""),
+                            description=r.get("description", "GitHub repository"),
+                            language=r.get("language", "Other"),
+                            default_branch=r.get("default_branch", "main"),
+                            clone_url=r.get("clone_url"),
+                            is_connected=True,
+                        )
+                        session.add(new_r)
+                    else:
+                        if user and not existing.user_id:
+                            existing.user_id = user.user_id
+                        existing.repo_name = r.get("repo_name", existing.repo_name)
+                        existing.owner = r.get("owner", existing.owner)
+                        existing.description = r.get("description", existing.description)
+                        existing.language = r.get("language", existing.language)
+                        existing.default_branch = r.get("default_branch", existing.default_branch)
+                        existing.clone_url = r.get("clone_url", existing.clone_url)
+                        existing.is_connected = True
+                        session.add(existing)
+                session.commit()
+            except Exception as e:
+                logger.warning(f"Auto-sync repos in list_repositories encountered: {e}")
 
     query = select(RepoConfig)
+    if user and not user.is_admin:
+        query = query.where(RepoConfig.user_id == user.user_id)
     # Only filter by owner if req_owner was explicitly requested and is not "all"
     if req_owner and req_owner != "all":
         query = query.where(func.lower(RepoConfig.owner) == req_owner)

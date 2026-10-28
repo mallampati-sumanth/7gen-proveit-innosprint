@@ -187,6 +187,7 @@ class User(SQLModel, table=True):
     auth_provider: str = Field(default="email")  # email | github
     github_id: Optional[str] = Field(default=None, index=True)
     github_username: Optional[str] = Field(default=None)
+    github_pat: Optional[str] = Field(default=None)
     avatar_url: Optional[str] = Field(default=None)
     is_active: bool = Field(default=True)
     is_admin: bool = Field(default=False)

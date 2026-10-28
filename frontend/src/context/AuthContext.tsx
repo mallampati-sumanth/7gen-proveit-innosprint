@@ -85,6 +85,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(u);
     setError(null);
     if (typeof window !== "undefined") {
+      const prevUser = localStorage.getItem("proveit_user");
+      if (prevUser && prevUser !== u.username) {
+        localStorage.removeItem("proveit_github_pat");
+      }
       localStorage.setItem("proveit_token", t);
       localStorage.setItem("proveit_user", u.username);
       localStorage.setItem("proveit_user_data", JSON.stringify(u));
@@ -311,6 +315,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       saveAuthSession(data.access_token, data.user);
       if (typeof window !== "undefined") {
+        if (data.user?.username) {
+          localStorage.setItem(`proveit_github_pat_${data.user.username}`, ghToken.trim());
+        }
         localStorage.setItem("proveit_github_pat", ghToken.trim());
       }
       return true;

@@ -134,7 +134,15 @@ function MainApp() {
 
   const loadData = useCallback(async () => {
     try {
-      const storedPat = (typeof window !== "undefined" ? localStorage.getItem("proveit_github_pat") : null) || "";
+      const authJwt = (typeof window !== "undefined" ? localStorage.getItem("proveit_token") : null) || "";
+      const userKey = user?.username ? `proveit_github_pat_${user.username}` : "proveit_github_pat";
+      const storedPat = (typeof window !== "undefined" ? (localStorage.getItem(userKey) || (user?.username === "admin" ? localStorage.getItem("proveit_github_pat") : null)) : null) || "";
+
+      const authHeaders: Record<string, string> = {};
+      if (authJwt) {
+        authHeaders["Authorization"] = `Bearer ${authJwt}`;
+      }
+
       const profileUrl = storedPat
         ? `${API_BASE}/api/agent/github/profile?token=${encodeURIComponent(storedPat)}`
         : `${API_BASE}/api/agent/github/profile`;
@@ -143,9 +151,9 @@ function MainApp() {
         : `${API_BASE}/api/agent/repos`;
 
       const [rRes, iRes, pRes] = await Promise.all([
-        fetch(reposUrl),
-        fetch(`${API_BASE}/api/agent/ec2/instances`),
-        fetch(profileUrl),
+        fetch(reposUrl, { headers: authHeaders }),
+        fetch(`${API_BASE}/api/agent/ec2/instances`, { headers: authHeaders }),
+        fetch(profileUrl, { headers: authHeaders }),
       ]);
       const rData = await rRes.json();
       const iData = await iRes.json();
@@ -1169,6 +1177,7 @@ function MainApp() {
         open={connectModalOpen}
         onClose={() => setConnectModalOpen(false)}
         onConnected={loadData}
+        username={user?.username}
       />
 
       {/* 1-Click Provision Modal */}
