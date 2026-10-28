@@ -698,7 +698,8 @@ docker run -d --restart unless-stopped --name proveit-live-app -p {app_port}:80 
                     env_safe_lines.append("HACKATHON_STATE=RUNNING")
 
                 env_payload = "\n".join(env_safe_lines)
-                internal_port = int(env_vars.get("PORT")) if str(env_vars.get("PORT", "")).isdigit() else port
+                port_val = env_vars.get("PORT")
+                internal_port = int(port_val) if port_val and str(port_val).isdigit() else port
 
                 q_repo = shlex.quote(repo_clean)
                 q_clone = shlex.quote(clone_url)

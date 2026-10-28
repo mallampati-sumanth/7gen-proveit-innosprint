@@ -11,7 +11,7 @@ from sqlmodel import Session, select
 
 from backend.app.config import settings
 from backend.app.db import get_session
-from backend.app.entities.models import Run, LedgerEntry, RepoConfig, RepoEnvVar
+from backend.app.entities.models import Run, LedgerEntry, RepoConfig, RepoEnvVar, decrypt_secret
 from backend.app.providers.registry import cloud_registry
 from backend.app.services.self_healing import sre_service, DiagnosisResult
 
@@ -164,7 +164,10 @@ async def deploy_to_cloud(req: MultiCloudDeployRequest, session: Session = Depen
             RepoEnvVar.environment == target_env,
         )
     ).all()
-    merged_env: Dict[str, str] = {e.key: e.value.strip("'\"") for e in db_envs}
+    merged_env: Dict[str, str] = {
+        e.key: (decrypt_secret(e.value) if e.is_secret else e.value).strip("'\"")
+        for e in db_envs
+    }
     if req.env_vars:
         merged_env.update(req.env_vars)
     if "ENVIRONMENT" not in merged_env:

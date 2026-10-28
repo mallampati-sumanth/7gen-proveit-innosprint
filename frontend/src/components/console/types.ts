@@ -76,7 +76,10 @@ export interface RepoEnvVariable {
   updated_at?: string;
 }
 
-export const API_BASE = "http://localhost:8000";
+export const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "http://localhost:8000";
 
 /* ─────────── THEME TOKENS ─────────── */
 export const THEME_VARS: Record<ThemeMode, Record<string, string>> = {

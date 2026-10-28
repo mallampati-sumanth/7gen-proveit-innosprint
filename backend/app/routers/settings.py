@@ -115,6 +115,12 @@ def get_platform_settings() -> Dict[str, Any]:
 
     return {
         **RUNTIME_SETTINGS,
+        "cloud_mode": settings.CLOUD_MODE,
+        "aws_region": settings.AWS_REGION,
+        "max_managed_instances": settings.MAX_MANAGED_INSTANCES,
+        "chaos_enabled": settings.CHAOS_ENABLED,
+        "max_agent_steps": settings.MAX_AGENT_STEPS,
+        "multicloud_sandbox_enabled": getattr(settings, "MULTICLOUD_SANDBOX_ENABLED", RUNTIME_SETTINGS.get("multicloud_sandbox_enabled", True)),
         "llm_provider": settings.LLM_PROVIDER,
         "llm_model": (
             settings.GEMINI_MODEL if settings.LLM_PROVIDER == "gemini" else (

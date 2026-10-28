@@ -1,10 +1,10 @@
-# pyrefly: ignore[missing-import]
 from sqlmodel import SQLModel, create_engine, Session
+from sqlalchemy import event, text
 from backend.app.config import settings
 
 # Configure engine dynamically for SQLite or Supabase (PostgreSQL)
 is_sqlite = settings.DATABASE_URL.startswith("sqlite")
-connect_args = {"check_same_thread": False} if is_sqlite else {}
+connect_args = {"check_same_thread": False, "timeout": 30.0} if is_sqlite else {}
 
 engine = create_engine(
     settings.DATABASE_URL,
@@ -12,6 +12,17 @@ engine = create_engine(
     connect_args=connect_args,
     pool_pre_ping=True
 )
+
+if is_sqlite:
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL;")
+            cursor.execute("PRAGMA busy_timeout=30000;")
+            cursor.execute("PRAGMA synchronous=NORMAL;")
+        finally:
+            cursor.close()
 
 
 def init_db() -> None:
@@ -58,10 +69,20 @@ def init_db() -> None:
                     ("target_ec2", "VARCHAR"),
                     ("environment", "VARCHAR DEFAULT 'production'"),
                     ("injected_env_json", "VARCHAR DEFAULT '{}'"),
+                    ("user_id", "VARCHAR"),
+                    ("blast_radius_score", "FLOAT"),
+                    ("sandbox_tested", "BOOLEAN"),
                 ]
                 for col_name, col_def in run_cols_to_add:
                     if col_name not in existing_run_cols:
                         conn.execute(text(f'ALTER TABLE "run" ADD COLUMN {col_name} {col_def};'))
+
+                # Auto-migrate repoconfig table columns
+                res_repo = conn.execute(text("PRAGMA table_info('repoconfig');"))
+                existing_repo_cols = {row[1] for row in res_repo.fetchall()}
+                if "user_id" not in existing_repo_cols:
+                    conn.execute(text('ALTER TABLE "repoconfig" ADD COLUMN user_id VARCHAR;'))
+
                 conn.commit()
             except Exception:
                 pass
@@ -74,6 +95,10 @@ def init_db() -> None:
                 conn.execute(text('ALTER TABLE "run" ADD COLUMN IF NOT EXISTS target_ec2 VARCHAR;'))
                 conn.execute(text('ALTER TABLE "run" ADD COLUMN IF NOT EXISTS environment VARCHAR DEFAULT \'production\';'))
                 conn.execute(text('ALTER TABLE "run" ADD COLUMN IF NOT EXISTS injected_env_json VARCHAR DEFAULT \'{}\';'))
+                conn.execute(text('ALTER TABLE "run" ADD COLUMN IF NOT EXISTS user_id VARCHAR;'))
+                conn.execute(text('ALTER TABLE "run" ADD COLUMN IF NOT EXISTS blast_radius_score FLOAT;'))
+                conn.execute(text('ALTER TABLE "run" ADD COLUMN IF NOT EXISTS sandbox_tested BOOLEAN;'))
+                conn.execute(text('ALTER TABLE "repoconfig" ADD COLUMN IF NOT EXISTS user_id VARCHAR;'))
                 conn.commit()
             except Exception:
                 pass

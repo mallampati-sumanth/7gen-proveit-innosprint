@@ -44,7 +44,7 @@ class RenderProvider(BaseCloudProvider):
         Dynamically inspect repository structure, language, framework, ports, and entrypoints.
         Never hardcode runtime, start commands, or ports.
         """
-        gh_tok = github_token or os.getenv("GITHUB_TOKEN") or getattr(settings, "GITHUB_TOKEN", None)
+        gh_tok = str(github_token or os.getenv("GITHUB_TOKEN") or getattr(settings, "GITHUB_TOKEN", "") or "")
         tools = GitHubTools(token=gh_tok)
         inspection = tools.inspect_repository(repo_name, branch=branch)
         if inspection.get("error"):

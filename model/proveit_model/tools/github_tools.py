@@ -414,7 +414,7 @@ class GitHubTools:
                         else:
                             discovered_env_lines.append(f"DATABASE_URL=sqlite:///{name_val}.sqlite3")
                         
-                        app_prefix = settings_source.split("/")[0]
+                        app_prefix = settings_source.split("/")[0] if settings_source else repo_name
                         discovered_env_lines.append(f"DJANGO_SETTINGS_MODULE={app_prefix}.settings")
 
                 # 2. Check package.json (Node/JS/TS) if not identified as primary Django backend

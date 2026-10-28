@@ -1,6 +1,46 @@
 from typing import Optional
 from datetime import datetime, timezone
+import base64
+import hashlib
 from sqlmodel import SQLModel, Field
+
+
+def _get_crypto_fernet():
+    try:
+        from cryptography.fernet import Fernet
+        from backend.app.config import settings
+        secret_key = getattr(settings, "JWT_SECRET", "super_secret_jwt_key_proveit_hackathon_change_in_prod")
+        key_bytes = hashlib.sha256(secret_key.encode("utf-8")).digest()
+        fernet_key = base64.urlsafe_b64encode(key_bytes)
+        return Fernet(fernet_key)
+    except Exception:
+        return None
+
+
+def encrypt_secret(val: str) -> str:
+    """Encrypts a secret string at rest using AES-128-CBC (Fernet) deterministically keyed from app secrets."""
+    if not val:
+        return val
+    try:
+        f = _get_crypto_fernet()
+        if f:
+            return f.encrypt(val.encode("utf-8")).decode("utf-8")
+    except Exception:
+        pass
+    return val
+
+
+def decrypt_secret(val: str) -> str:
+    """Transparently decrypts a secret value at runtime, falling back cleanly if already plaintext."""
+    if not val or not isinstance(val, str) or not val.startswith("gAAAAA"):
+        return val
+    try:
+        f = _get_crypto_fernet()
+        if f:
+            return f.decrypt(val.encode("utf-8")).decode("utf-8")
+    except Exception:
+        pass
+    return val
 
 
 def get_utc_now():
@@ -10,6 +50,7 @@ def get_utc_now():
 class Run(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     run_id: str = Field(index=True, unique=True)
+    user_id: Optional[str] = Field(default=None, index=True)
     status: str = Field(default="PENDING")  # PENDING, RUNNING, HEALED, ESCALATED, FAILED
     prompt: str
     target_repo: Optional[str] = None
@@ -17,6 +58,8 @@ class Run(SQLModel, table=True):
     environment: str = Field(default="production")
     injected_env_json: Optional[str] = Field(default="{}")
     cloud_mode: str = Field(default="mock")
+    blast_radius_score: Optional[float] = Field(default=None)
+    sandbox_tested: Optional[bool] = Field(default=None)
     created_at: datetime = Field(default_factory=get_utc_now)
     updated_at: datetime = Field(default_factory=get_utc_now)
 
@@ -81,6 +124,7 @@ class BenchmarkResult(SQLModel, table=True):
 class RepoConfig(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     repo_id: str = Field(index=True, unique=True)  # e.g. "7gen/react-dashboard"
+    user_id: Optional[str] = Field(default=None, index=True)
     repo_name: str
     owner: str = Field(default="7gen")
     description: Optional[str] = None
