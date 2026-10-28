@@ -388,7 +388,7 @@ class RenderProvider(BaseCloudProvider):
                 if root_directory and root_directory.strip():
                     service_details["rootDir"] = root_directory.strip().strip("/")
 
-                async with httpx.AsyncClient(timeout=35.0, verify=False) as client:
+                async with httpx.AsyncClient(timeout=35.0) as client:
                     # Step A: Validate authentication & resolve Owner ID
                     owner_res = await client.get("https://api.render.com/v1/owners", headers=headers)
                     if owner_res.status_code in [401, 403]:
@@ -699,7 +699,7 @@ class RenderProvider(BaseCloudProvider):
                     "Authorization": f"Bearer {self.api_key}",
                     "Accept": "application/json",
                 }
-                async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+                async with httpx.AsyncClient(timeout=10.0) as client:
                     # Fetch live service details
                     srv_res = await client.get(f"https://api.render.com/v1/services/{service_id}", headers=headers)
                     srv_data = srv_res.json() if srv_res.status_code == 200 else {}
@@ -771,7 +771,7 @@ class RenderProvider(BaseCloudProvider):
                     "Accept": "application/json",
                     "Content-Type": "application/json",
                 }
-                async with httpx.AsyncClient(timeout=15.0, verify=False) as client:
+                async with httpx.AsyncClient(timeout=15.0) as client:
                     # In Render API, rollback triggers via POST /v1/services/{service_id}/deploys/roll-back
                     # If specific deploy is known or fallback to redeploy
                     res = await client.post(
