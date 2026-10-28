@@ -189,13 +189,11 @@ def get_github_profile(
         use_token = cleaned_token
     elif user and user.github_pat:
         use_token = decrypt_secret(user.github_pat)
-    elif user and user.is_admin and settings.GITHUB_TOKEN and not settings.GITHUB_TOKEN.startswith("ghp_your"):
-        use_token = settings.GITHUB_TOKEN
 
     if not use_token:
         return {"connected": False, "message": "No GitHub account connected."}
 
-    if cleaned_token and user and user.is_admin and cleaned_token != settings.GITHUB_TOKEN:
+    if cleaned_token and user and cleaned_token != settings.GITHUB_TOKEN:
         settings.GITHUB_TOKEN = cleaned_token
         os.environ["GITHUB_TOKEN"] = cleaned_token
         github_tools.token = cleaned_token
@@ -232,14 +230,12 @@ def connect_github_account(
         session.commit()
         session.refresh(user)
 
-    # If demo admin, synchronize to server settings
-    if user and user.is_admin:
-        settings.GITHUB_TOKEN = tok
-        os.environ["GITHUB_TOKEN"] = tok
-        github_tools.token = tok
-        agent_instance.github.token = tok
-        if hasattr(agent_instance, "executor") and hasattr(agent_instance.executor, "github"):
-            agent_instance.executor.github.token = tok
+    settings.GITHUB_TOKEN = tok
+    os.environ["GITHUB_TOKEN"] = tok
+    github_tools.token = tok
+    agent_instance.github.token = tok
+    if hasattr(agent_instance, "executor") and hasattr(agent_instance.executor, "github"):
+        agent_instance.executor.github.token = tok
 
     # Sync real user repositories into the database
     real_repos = github_tools.list_user_repositories(token=tok, per_page=100, fetch_all=True)
@@ -338,8 +334,6 @@ def list_repositories(
         active_tok = cleaned_token
     elif user and user.github_pat:
         active_tok = decrypt_secret(user.github_pat)
-    elif user and user.is_admin and settings.GITHUB_TOKEN and not settings.GITHUB_TOKEN.startswith("ghp_your"):
-        active_tok = settings.GITHUB_TOKEN
 
     connected_login = ""
     if active_tok:
