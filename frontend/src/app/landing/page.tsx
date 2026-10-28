@@ -73,16 +73,6 @@ const CSS = `
     transition: border-color .18s, background .18s, transform .18s;
   }
   .sai-btn-out:hover { border-color: #a3a3a3; background: #fafafa; transform: scale(1.02); }
-  .sai-btn-apk-nav {
-    font-size: 13px; font-weight: 500; color: #16a34a;
-    background: #f0fdf4; border: 1.5px solid #bbf7d0; border-radius: 980px;
-    padding: 6px 14px; cursor: pointer; letter-spacing: -.01em;
-    text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
-    transition: all .18s;
-  }
-  .sai-btn-apk-nav:hover {
-    border-color: #16a34a; background: #dcfce7; color: #15803d; transform: scale(1.02);
-  }
 
   .sai-user-chip {
     font-size: 13px; font-weight: 500; color: #0a0a0a;
@@ -457,9 +447,6 @@ function LandingContent() {
             ))}
           </div>
           <div className="sai-nav-actions">
-            <a href="/proveit.apk" download="proveit.apk" className="sai-btn-apk-nav" title="Download ProveIt Android APK">
-              <IcoDownload s={13} c="#16a34a" /> Download APK
-            </a>
             {mounted && activeUsername ? (
               <a href={APP} className="sai-user-chip" title={`Signed in as @${activeUsername}`}>
                 <span className="sai-user-dot" />
