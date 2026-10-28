@@ -262,7 +262,9 @@ Eliminates one of the most common web deployment errors: **Directory Listings (`
 
 ### 5. Cryptographic Proof Ledger
 Every deployment calculates an immutable SHA-256 seal:
-$$\text{Proof Seal} = \text{SHA-256}(\text{provider} \parallel \text{deployment\_id} \parallel \text{live\_url} \parallel \text{commit\_sha})$$
+```text
+Proof Seal = SHA-256( provider || deployment_id || live_url || commit_sha )
+```
 * Chained tamper-evident ledger records stored with verification timestamps, HTTP probe status codes, and latency measurements.
 * Enables one-click mathematical integrity verification and exportable SOC2 compliance reports.
 
