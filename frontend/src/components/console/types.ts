@@ -79,7 +79,9 @@ export interface RepoEnvVariable {
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ||
   process.env.NEXT_PUBLIC_BACKEND_URL ||
-  "http://localhost:8000";
+  (typeof window !== "undefined" && window.location.origin.includes("vercel.app")
+    ? ""
+    : "http://localhost:8000");
 
 export function getAuthHeaders(): Record<string, string> {
   if (typeof window !== "undefined") {

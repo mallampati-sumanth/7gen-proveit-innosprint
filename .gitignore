@@ -37,6 +37,12 @@ ENV/
 htmlcov/
 *.cover
 
+# Build artifacts
+*.tsbuildinfo
+.next/
+dist/
+build/
+
 # Database & Logs
 *.db
 *.db-wal

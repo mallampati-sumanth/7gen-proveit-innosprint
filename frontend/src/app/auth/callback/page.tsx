@@ -4,7 +4,12 @@ import React, { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  (typeof window !== "undefined" && window.location.origin.includes("vercel.app")
+    ? ""
+    : "http://localhost:8000");
 
 function CallbackContent() {
   const searchParams = useSearchParams();

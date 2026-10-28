@@ -3,7 +3,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { setAuthToken } from "../lib/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  (typeof window !== "undefined" && window.location.origin.includes("vercel.app")
+    ? ""
+    : "http://localhost:8000");
 
 export interface AuthUser {
   user_id: string;
@@ -332,7 +337,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithGitHubOAuth = async (): Promise<void> => {
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/auth/github/url`);
+      const redirectUri = typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : "";
+      const url = redirectUri
+        ? `${API_BASE}/api/auth/github/url?redirect_uri=${encodeURIComponent(redirectUri)}`
+        : `${API_BASE}/api/auth/github/url`;
+      const res = await fetch(url);
       const data = await res.json();
       if (data.configured && data.url) {
         window.location.href = data.url;

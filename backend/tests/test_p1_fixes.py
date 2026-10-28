@@ -122,3 +122,28 @@ def test_repos_endpoint_and_cors_headers():
     res2 = client.post("/api/agent/github/connect", json={"token": "invalid_test_token"}, headers={"Origin": "http://localhost:3000"})
     assert res2.status_code in [400, 401]
     assert res2.headers.get("access-control-allow-origin") == "http://localhost:3000"
+
+
+def test_github_oauth_url_dynamic_redirect_uri():
+    """Verify GitHub OAuth URL accepts dynamic redirect_uri for Vercel deployments."""
+    from backend.app.config import settings
+    # Test with GITHUB_CLIENT_ID configured
+    orig_client_id = settings.GITHUB_CLIENT_ID
+    try:
+        settings.GITHUB_CLIENT_ID = "mock_client_id_12345"
+
+        # 1. Default fallback to localhost:3000
+        r_default = client.get("/api/auth/github/url")
+        assert r_default.status_code == 200
+        assert "localhost%3A3000%2Fauth%2Fcallback" in r_default.json()["url"]
+
+        # 2. Dynamic Vercel redirect URI
+        vercel_uri = "https://proveit-frontend.vercel.app/auth/callback"
+        r_vercel = client.get(f"/api/auth/github/url?redirect_uri={vercel_uri}")
+        assert r_vercel.status_code == 200
+        data = r_vercel.json()
+        assert data["configured"] is True
+        assert data["redirect_uri"] == vercel_uri
+        assert "https%3A%2F%2Fproveit-frontend.vercel.app%2Fauth%2Fcallback" in data["url"]
+    finally:
+        settings.GITHUB_CLIENT_ID = orig_client_id

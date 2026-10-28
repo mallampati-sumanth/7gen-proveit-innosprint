@@ -5,7 +5,7 @@ import re
 import httpx
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 try:
     import jwt
@@ -428,8 +428,8 @@ async def github_auth(req: GitHubAuthRequest, session: Session = Depends(get_ses
 
 
 @router.get("/github/url")
-def get_github_oauth_url():
-    """Get GitHub OAuth authorization URL if configured."""
+def get_github_oauth_url(redirect_uri: Optional[str] = Query(None)):
+    """Get GitHub OAuth authorization URL with dynamic redirect URI for localhost, Vercel, or custom domains."""
     client_id = settings.GITHUB_CLIENT_ID
     if not client_id:
         return {
@@ -437,13 +437,24 @@ def get_github_oauth_url():
             "url": None,
             "message": "GITHUB_CLIENT_ID not configured in backend environment. Use Personal Access Token to connect."
         }
-    redirect_uri = "http://localhost:3000/auth/callback"
+
+    # Determine safe redirect URI
+    target_redirect = "http://localhost:3000/auth/callback"
+    if redirect_uri:
+        clean_redirect = redirect_uri.strip()
+        # Allow localhost, 127.0.0.1, and any *.vercel.app domain
+        if re.match(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?(/.*)?$", clean_redirect) or re.match(r"^https://[a-zA-Z0-9_\-\.]+\.vercel\.app(/.*)?$", clean_redirect):
+            target_redirect = clean_redirect
+
+    import urllib.parse
+    encoded_redirect = urllib.parse.quote(target_redirect, safe="")
     scope = "repo,read:user,user:email"
-    url = f"https://github.com/login/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&scope={scope}"
+    url = f"https://github.com/login/oauth/authorize?client_id={client_id}&redirect_uri={encoded_redirect}&scope={scope}"
     return {
         "configured": True,
         "url": url,
         "client_id": client_id,
+        "redirect_uri": target_redirect,
     }
 
 
