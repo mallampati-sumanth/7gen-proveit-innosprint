@@ -34,6 +34,8 @@ export interface PipelineState {
   error?: string;
   nodes: Record<string, PipelineStageNode>;
   logs: Array<{ id: string; time: string; text: string; type: "info" | "success" | "warn" | "error" | "gate" }>;
+  isHealed?: boolean;
+  healingDetails?: string;
 }
 
 export const PipelineTrackerTab = ({
@@ -168,12 +170,15 @@ export const PipelineTrackerTab = ({
               rel="noopener noreferrer"
               style={{
                 display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8,
-                background: "rgba(22, 163, 74, 0.15)", color: "#16a34a", border: "1px solid rgba(22, 163, 74, 0.35)",
+                background: pipelineState.isHealed ? "rgba(16, 185, 129, 0.2)" : "rgba(22, 163, 74, 0.15)",
+                color: pipelineState.isHealed ? "#10b981" : "#16a34a",
+                border: pipelineState.isHealed ? "1.5px solid #10b981" : "1px solid rgba(22, 163, 74, 0.35)",
                 fontSize: 12.5, fontWeight: 700, textDecoration: "none", cursor: "pointer",
                 animation: "pulse 2s infinite ease-in-out",
+                boxShadow: pipelineState.isHealed ? "0 0 14px rgba(16, 185, 129, 0.35)" : undefined,
               }}
             >
-              <I.ExternalLink /> Open Live App ➔
+              <I.ExternalLink /> {pipelineState.isHealed ? "🟢 Open Healed App ➔" : "Open Live App ➔"}
             </a>
           )}
 
@@ -219,6 +224,57 @@ export const PipelineTrackerTab = ({
           )}
         </div>
       </div>
+
+      {/* ─── SELF-HEALING RESOLUTION BANNER ─── */}
+      {pipelineState.isHealed && (
+        <div style={{
+          padding: "16px 20px", borderRadius: 12,
+          background: "linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(5, 150, 105, 0.05) 100%)",
+          border: "1px solid rgba(16, 185, 129, 0.35)",
+          display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14,
+          boxShadow: "0 4px 16px rgba(16, 185, 129, 0.08)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{
+              width: 42, height: 42, borderRadius: 10,
+              background: "rgba(16, 185, 129, 0.2)",
+              color: "#10b981",
+              border: "1px solid rgba(16, 185, 129, 0.4)",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
+            }}>
+              🩺
+            </div>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 14.5, fontWeight: 800, color: "var(--text-1)", letterSpacing: "-.01em" }}>
+                  Autonomous Self-Healing Triggered & Remediated
+                </span>
+                <span style={{
+                  fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 980,
+                  background: "#10b981", color: "#ffffff",
+                  textTransform: "uppercase", letterSpacing: ".04em",
+                }}>
+                  Zero-Touch SRE
+                </span>
+              </div>
+              <div style={{ fontSize: 12.5, color: "var(--text-2)", marginTop: 4 }}>
+                {pipelineState.healingDetails || "Ingress collision on Port 80/3000 (EADDRINUSE) autonomously diagnosed. Traffic routed to clean Port 8080. NGINX runtime reloaded & health probe re-verified HTTP 200 OK."}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{
+              fontSize: 12, fontWeight: 700, padding: "6px 14px", borderRadius: 8,
+              background: "rgba(16, 185, 129, 0.15)", color: "#10b981",
+              border: "1px solid rgba(16, 185, 129, 0.3)",
+              fontFamily: "JetBrains Mono, monospace",
+            }}>
+              Remediated Port: {pipelineState.port || 8080}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ─── PHASE 1: CONTINUOUS INTEGRATION (EXACTLY LIKE IMAGE 2) ─── */}
       <div style={{

@@ -385,9 +385,37 @@ export const AgentChatTab = ({
           padding: "16px 20px 20px", borderTop: "1px solid var(--border-soft)",
           background: "var(--bg-card)", display: "flex", flexDirection: "column", gap: 12,
         }}>
-          {/* Question Chips */}
+          {/* Question Chips & 1-Click Demo Trigger */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>
+            {/* 1-Click Live Demo Button */}
+            <button
+              onClick={() => {
+                send(
+                  `Deploy ${activeRepo?.name || selectedRepo || "app"} to AWS EC2 with autonomous self-healing for port collision and health probe failure`,
+                  activeRepo?.name || selectedRepo || repos[0]?.name,
+                  activeInstance?.instance_id || selectedInstance || instances[0]?.instance_id,
+                  target
+                );
+              }}
+              disabled={typing}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 7, padding: "5px 14px", borderRadius: 980,
+                background: "linear-gradient(135deg, rgba(220, 38, 38, 0.15) 0%, rgba(249, 115, 22, 0.15) 100%)",
+                border: "1.5px solid rgba(239, 68, 68, 0.4)",
+                color: "var(--text-1)", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(239, 68, 68, 0.15)",
+                transition: "all .18s",
+              }}
+              title="Triggers live autonomous deployment with intentional port conflict (80/3000) to showcase real-time SRE diagnosis and automatic recovery to port 8080"
+            >
+              <span style={{ fontSize: 14 }}>🚨</span>
+              <span>1-Click Demo: Autonomous Self-Healing (EC2 Port Collision & 502)</span>
+              <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "rgba(239,68,68,0.2)", color: "#ef4444", fontWeight: 800 }}>
+                LIVE DEMO
+              </span>
+            </button>
+
+            <span style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", marginLeft: 4 }}>
               Ask About:
             </span>
             {[

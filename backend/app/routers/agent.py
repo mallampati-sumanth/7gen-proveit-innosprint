@@ -71,8 +71,11 @@ aws_tools = AWSTools(region=settings.AWS_REGION, mock_mode=(settings.CLOUD_MODE 
 
 # ─────────── PYDANTIC REQUEST SCHEMAS ───────────
 class DeployRequest(BaseModel):
-    prompt: str
+    prompt: Optional[str] = "Autonomous Deployment via Agent Tool"
     target_repo: Optional[str] = None
+    repo_name: Optional[str] = None
+    repository: Optional[str] = None
+    repo: Optional[str] = None
     target_ec2: Optional[str] = None
     environment: str = "production"
     branch: Optional[str] = None
@@ -1163,7 +1166,7 @@ def start_deployment(req: DeployRequest, session: Session = Depends(get_session)
     """Start autonomous deployment of target repo to EC2 instance with .env injection."""
     run_id = f"run-{hashlib.md5(f'{req.prompt}{time.time()}'.encode()).hexdigest()[:8]}"
     
-    target_repo = req.target_repo
+    target_repo = req.target_repo or req.repo_name or req.repository or req.repo
     if not target_repo:
         first_repo = session.exec(select(RepoConfig)).first()
         if not first_repo:
@@ -1274,8 +1277,9 @@ async def stream_agent_execution(run_id: str, session: Session = Depends(get_ses
             if hasattr(agent_instance, "executor") and hasattr(agent_instance.executor, "github"):
                 agent_instance.executor.github.token = settings.GITHUB_TOKEN
 
+        user_prompt = run.prompt if (run and run.prompt) else "Autonomous EC2 Deployment with .env injection"
         async for event in agent_instance.execute_run_stream(
-            prompt="Autonomous EC2 Deployment with .env injection",
+            prompt=user_prompt,
             target_repo=target_repo,
             target_ec2=target_ec2,
             injected_env=injected_env,
@@ -1377,9 +1381,24 @@ def get_execution_logs(session: Session = Depends(get_session)):
 
 @router.get("/runs")
 def list_runs(session: Session = Depends(get_session)):
-    runs = session.exec(select(Run).order_by(Run.id.desc()).limit(25)).all()
+    runs = session.exec(select(Run).order_by(Run.id.desc()).limit(50)).all()
     if not runs:
         return []
+
+    entries = session.exec(select(LedgerEntry).order_by(LedgerEntry.id.desc()).limit(100)).all()
+    ledger_map = {}
+    for e in entries:
+        try:
+            p = json.loads(e.payload_json) if e.payload_json else {}
+            rid = p.get("run_id")
+            if rid and rid not in ledger_map:
+                ledger_map[rid] = {
+                    "proof_hash": e.hash,
+                    "app_url": p.get("app_url"),
+                }
+        except Exception:
+            pass
+
     return [
         {
             "run_id": r.run_id,
@@ -1389,9 +1408,42 @@ def list_runs(session: Session = Depends(get_session)):
             "status": r.status,
             "environment": r.environment,
             "created_at": r.created_at.isoformat() if r.created_at else "",
+            "app_url": ledger_map.get(r.run_id, {}).get("app_url") or "",
+            "proof_hash": ledger_map.get(r.run_id, {}).get("proof_hash") or "",
         }
         for r in runs
     ]
+
+
+@router.get("/runs/{run_id}")
+def get_run_details(run_id: str, session: Session = Depends(get_session)):
+    run = session.exec(select(Run).where(Run.run_id == run_id)).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    entry = session.exec(select(LedgerEntry).where(LedgerEntry.entry_id.contains(run_id[-4:]))).first()
+    app_url = ""
+    proof_hash = ""
+    if entry:
+        proof_hash = entry.hash
+        try:
+            payload = json.loads(entry.payload_json) if entry.payload_json else {}
+            app_url = payload.get("app_url") or ""
+        except Exception:
+            pass
+
+    return {
+        "run_id": run.run_id,
+        "target_repo": run.target_repo,
+        "target_ec2": run.target_ec2 or "EC2 Host",
+        "prompt": run.prompt,
+        "status": run.status,
+        "environment": run.environment,
+        "created_at": run.created_at.isoformat() if run.created_at else "",
+        "updated_at": run.updated_at.isoformat() if run.updated_at else "",
+        "app_url": app_url,
+        "proof_hash": proof_hash,
+    }
 
 
 @router.get("/ledger")
