@@ -29,6 +29,8 @@ from backend.app.entities.models import (
     RepoEnvVar,
     EC2Instance,
     BenchmarkResult,
+    encrypt_secret,
+    decrypt_secret,
 )
 # pyrefly: ignore[missing-import]
 from proveit_model import ProveItAgent, GitHubTools, AWSTools
@@ -107,6 +109,7 @@ class EnvVarItem(BaseModel):
     value: str
     category: Optional[str] = "APP"
     is_secret: Optional[bool] = False
+    secret: Optional[bool] = None
 
 
 class SaveRepoEnvRequest(BaseModel):
@@ -499,24 +502,24 @@ def get_repository_env(
 
     # Format raw env text
     raw_lines = [f"# Injected environment for {repo_clean} ({environment})"]
+    variables_out = []
     for e in envs:
-        raw_lines.append(f"{e.key}={e.value}")
+        val = decrypt_secret(e.value) if e.is_secret else e.value
+        raw_lines.append(f"{e.key}={val}")
+        variables_out.append({
+            "id": e.id,
+            "key": e.key,
+            "value": val,
+            "category": e.category,
+            "secret": e.is_secret,
+            "updated_at": e.updated_at.isoformat() if e.updated_at else None,
+        })
 
     return {
         "repo_id": repo_clean,
         "environment": environment,
         "count": len(envs),
-        "variables": [
-            {
-                "id": e.id,
-                "key": e.key,
-                "value": e.value,
-                "category": e.category,
-                "secret": e.is_secret,
-                "updated_at": e.updated_at.isoformat() if e.updated_at else None,
-            }
-            for e in envs
-        ],
+        "variables": variables_out,
         "raw_env": "\n".join(raw_lines),
     }
 
@@ -559,11 +562,12 @@ def save_repository_env(
                         "AUTH" if "auth" in k.lower() or "jwt" in k.lower() else "APP"
                     )
                 )
+                val_to_save = encrypt_secret(v) if is_sec else v
                 item = RepoEnvVar(
                     repo_id=repo_clean,
                     environment=req.environment,
                     key=k,
-                    value=v,
+                    value=val_to_save,
                     category=cat,
                     is_secret=is_sec,
                 )
@@ -571,13 +575,16 @@ def save_repository_env(
                 saved_items.append(item)
     elif req.variables:
         for v in req.variables:
+            is_sec = bool(v.is_secret or v.secret)
+            val_clean = v.value.strip().strip("'\"")
+            val_to_save = encrypt_secret(val_clean) if is_sec else val_clean
             item = RepoEnvVar(
                 repo_id=repo_clean,
                 environment=req.environment,
                 key=v.key.strip(),
-                value=v.value.strip().strip("'\""),
+                value=val_to_save,
                 category=v.category or "APP",
-                is_secret=bool(v.is_secret),
+                is_secret=is_sec,
             )
             session.add(item)
             saved_items.append(item)
@@ -1225,7 +1232,7 @@ def start_deployment(req: DeployRequest, session: Session = Depends(get_session)
                 RepoEnvVar.environment == req.environment,
             )
         ).all()
-        injected = {e.key: e.value.strip("'\"") for e in repo_envs}
+        injected = {e.key: (decrypt_secret(e.value) if e.is_secret else e.value).strip("'\"") for e in repo_envs}
 
     run = Run(
         run_id=run_id,

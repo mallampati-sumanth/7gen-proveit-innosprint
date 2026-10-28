@@ -341,9 +341,14 @@ class VercelProvider(BaseCloudProvider):
                             },
                         )
                     else:
-                        err_data = resp.json() if "application/json" in resp.headers.get("Content-Type", "") else {"message": resp.text}
-                        err_msg = err_data.get("error", {}).get("message") or err_data.get("message") or f"HTTP {resp.status_code}"
-                        err_code = err_data.get("error", {}).get("code") or "DEPLOY_FAILED"
+                        try:
+                            err_raw = resp.json() if "application/json" in resp.headers.get("Content-Type", "") else {}
+                        except Exception:
+                            err_raw = {}
+                        err_data = err_raw if isinstance(err_raw, dict) else {"message": str(err_raw)}
+                        error_obj = err_data.get("error", {})
+                        err_msg = (error_obj.get("message") if isinstance(error_obj, dict) else None) or err_data.get("message") or f"HTTP {resp.status_code}"
+                        err_code = (error_obj.get("code") if isinstance(error_obj, dict) else None) or "DEPLOY_FAILED"
                         return DeploymentResult(
                             provider=self.name,
                             deployment_id=deployment_id,

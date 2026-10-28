@@ -1,4 +1,3 @@
-from dotenv import variables
 import os
 import json
 import time
@@ -489,11 +488,17 @@ async def telephony_verify_pin(request: Request, session: Session = Depends(get_
     user_id = request.query_params.get("user_id")
     digits = form_data.get("Digits") or ""
 
-    user = session.get(User, int(user_id)) if user_id else None
+    user = None
+    if user_id:
+        try:
+            user = session.get(User, int(user_id))
+        except (ValueError, TypeError):
+            user = None
+
     if not user or digits.strip() != user.voice_pin:
         twiml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Aditi">Security PIN is incorrect. Authentication failed. Good bye.</Say>
+    <Say voice="Polly.Aditi">Security PIN is incorrect or session expired. Authentication failed. Good bye.</Say>
     <Hangup/>
 </Response>"""
         return Response(content=twiml, media_type="application/xml")
@@ -526,10 +531,25 @@ async def telephony_process_speech(request: Request, session: Session = Depends(
     repo_param = request.query_params.get("repo")
     speech_result = form_data.get("SpeechResult") or form_data.get("RecordingUrl") or ""
 
-    user = session.get(User, int(user_id)) if user_id else None
+    user = None
+    if user_id:
+        try:
+            user = session.get(User, int(user_id))
+        except (ValueError, TypeError):
+            user = None
+
     if not user:
         user = session.exec(select(User).where(User.voice_enabled == True)).first()
-    username = user.username if user else "engineer"
+
+    if not user:
+        twiml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aditi">User session expired or not found. Call ended.</Say>
+    <Hangup/>
+</Response>"""
+        return Response(content=twiml, media_type="application/xml")
+
+    username = user.username or "engineer"
 
     user_repos = [r.repo_id for r in get_user_repositories(user, session)] or ["pallets/flask"]
     matched_repo = repo_param or sarvam_voice_service.match_repository(speech_result, user_repos)

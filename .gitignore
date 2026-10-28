@@ -39,6 +39,8 @@ htmlcov/
 
 # Database & Logs
 *.db
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
 *.log
@@ -59,3 +61,4 @@ Thumbs.db
 .playwright-mcp/
 backend/keys/*.pem
 backend/keys/*.pub
+docs/local/*

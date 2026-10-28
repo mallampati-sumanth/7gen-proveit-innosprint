@@ -1,5 +1,7 @@
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.config import settings
 from backend.app.db import init_db
@@ -20,6 +22,14 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan
 )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logging.getLogger("uvicorn.error").error(f"Unhandled error on {request.url.path}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)},
+    )
 
 # CORS middleware for Next.js frontend (permits localhost and 127.0.0.1 on any port)
 app.add_middleware(

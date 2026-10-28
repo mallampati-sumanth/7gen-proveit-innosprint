@@ -3,7 +3,7 @@ import json
 import time
 import hashlib
 import logging
-from typing import AsyncGenerator, Dict, Any, List
+from typing import AsyncGenerator, Dict, Any, List, Optional
 from proveit_model.providers.factory import create_llm_provider
 from proveit_model.providers.base import AgentMessage
 from proveit_model.agent.analyzer_agent import RepoAnalyzerAgent
@@ -45,8 +45,8 @@ class ProveItAgent:
         cloud_mode: str = "mock",
         github_token: str = "",
         llm_provider: str = "gemini",
-        model_name: str = None,
-        base_url: str = None,
+        model_name: Optional[str] = None,
+        base_url: Optional[str] = None,
     ):
         active_key = api_key or gemini_key
         self.provider = create_llm_provider(
@@ -66,7 +66,7 @@ class ProveItAgent:
             analyzer=self.analyzer,
         )
 
-    async def chat(self, user_message: str, history: List[Dict[str, str]] = None, db_context: str = "") -> str:
+    async def chat(self, user_message: str, history: Optional[List[Dict[str, str]]] = None, db_context: str = "") -> str:
         """Conversational Agent response using the active LLM with live database deployment logs."""
         sys_prompt = f"""You are ProveIt Autonomous Cloud Architect & DevOps Diagnostic AI.
 You have direct, real-time access to the database containing all deployment runs, execution logs, failure reasons, health check probes, and AWS EC2 fleet states.
@@ -193,7 +193,7 @@ Your diagnostic capabilities:
         prompt: str,
         target_repo: str = "",
         target_ec2: str = "",
-        injected_env: Dict[str, str] = None,
+        injected_env: Optional[Dict[str, str]] = None,
         environment: str = "production",
         branch: str = "main",
     ) -> AsyncGenerator[Dict[str, Any], None]:

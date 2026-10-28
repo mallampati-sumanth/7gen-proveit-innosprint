@@ -29,11 +29,19 @@ def generate_salt() -> str:
 
 
 def hash_password(password: str, salt: str) -> str:
-    return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+    return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100_000).hex()
 
 
 def verify_password(password: str, salt: str, hashed: str) -> bool:
-    return hash_password(password, salt) == hashed
+    # 1. Primary: Verify with PBKDF2-HMAC (100,000 rounds) in constant time
+    pbkdf2_hash = hash_password(password, salt)
+    if secrets.compare_digest(pbkdf2_hash, hashed):
+        return True
+    # 2. Backward compatibility: Support legacy single-iteration SHA-256 for existing database accounts
+    legacy_hash = hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+    if secrets.compare_digest(legacy_hash, hashed):
+        return True
+    return False
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -119,9 +127,10 @@ def get_current_user_obj(
     token = credentials.credentials
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
-        username: str = payload.get("sub")
-        if not username:
+        username_sub = payload.get("sub")
+        if not username_sub or not isinstance(username_sub, str):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject.")
+        username: str = username_sub
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired or invalid token.")
 
