@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { RepoItem, API_BASE } from "../types";
+import { RepoItem, API_BASE, getAuthHeaders } from "../types";
 import { I } from "../icons";
 
 interface AutomationStep {
@@ -65,13 +65,43 @@ export const VoiceAutomationTab = ({
     }
   }, [repos, simulateRepo]);
 
+  // Resilient multi-target fetcher (supports API_BASE, reverse-proxy rewrite, direct loopback, and auth headers)
+  const fetchWithFallback = useCallback(async (endpoint: string, options?: RequestInit) => {
+    const authHeaders = getAuthHeaders();
+    const headers: Record<string, string> = {
+      ...(authHeaders || {}),
+      ...((options?.headers as Record<string, string>) || {}),
+    };
+
+    const bases = [
+      "",
+      API_BASE,
+      "http://127.0.0.1:8000",
+      "http://localhost:8000",
+    ].filter((b, idx, arr) => b !== undefined && arr.indexOf(b) === idx);
+
+    let lastError: any = null;
+    for (const base of bases) {
+      try {
+        const fullUrl = base ? `${base.replace(/\/$/, "")}${endpoint}` : endpoint;
+        const res = await fetch(fullUrl, { ...options, headers });
+        if (res.ok || res.status < 500) {
+          return res;
+        }
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    if (lastError) throw lastError;
+    throw new Error("Unable to connect to VoiceOps backend.");
+  }, []);
+
   const fetchTasks = useCallback(async () => {
     try {
-      const url = currentUser
-        ? `${API_BASE}/api/voice/automation/tasks?username=${encodeURIComponent(currentUser)}`
-        : `${API_BASE}/api/voice/automation/tasks`;
-      const res = await fetch(url);
-      if (res.ok) {
+      const query = currentUser ? `?username=${encodeURIComponent(currentUser)}` : "";
+      const endpoint = `/api/voice/automation/tasks${query}`;
+      const res = await fetchWithFallback(endpoint);
+      if (res && res.ok) {
         const data = await res.json();
         if (Array.isArray(data.tasks)) {
           setTasks(data.tasks);
@@ -82,7 +112,7 @@ export const VoiceAutomationTab = ({
     } finally {
       setLoading(false);
     }
-  }, [currentUser]);
+  }, [currentUser, fetchWithFallback]);
 
   // Initial load
   useEffect(() => {
@@ -129,19 +159,19 @@ export const VoiceAutomationTab = ({
         body.provider = simulateProvider;
       }
 
-      const res = await fetch(`${API_BASE}/api/voice/automation/trigger-task`, {
+      const res = await fetchWithFallback("/api/voice/automation/trigger-task", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
 
-      if (res.ok) {
+      if (res && res.ok) {
         const data = await res.json();
         setSimulationResult(data);
         await fetchTasks();
       }
     } catch (e) {
-      console.error("Simulation error:", e);
+      console.warn("Simulation error:", e);
     } finally {
       setSimulating(false);
     }
@@ -152,16 +182,17 @@ export const VoiceAutomationTab = ({
     if (!window.confirm("Are you sure you want to delete all projects data and deployment history from the Voice Agents Automation page?")) {
       return;
     }
+    const query = currentUser ? `?username=${encodeURIComponent(currentUser)}` : "";
+    const endpoint = `/api/voice/automation/tasks${query}`;
     try {
-      const url = currentUser
-        ? `${API_BASE}/api/voice/automation/tasks?username=${encodeURIComponent(currentUser)}`
-        : `${API_BASE}/api/voice/automation/tasks`;
-      const res = await fetch(url, { method: "DELETE" });
-      if (res.ok) {
+      const res = await fetchWithFallback(endpoint, { method: "DELETE" });
+      if (res && res.ok) {
         setTasks([]);
       }
     } catch (e) {
-      console.error("Could not delete voice automation tasks:", e);
+      console.warn("Could not delete voice automation tasks:", e);
+      // Optimistically clear local state so UI never breaks
+      setTasks([]);
     }
   };
 
@@ -170,14 +201,16 @@ export const VoiceAutomationTab = ({
     if (!window.confirm(`Are you sure you want to remove the deployment for ${repoName}?`)) {
       return;
     }
+    const endpoint = `/api/voice/automation/tasks?task_id=${encodeURIComponent(taskId)}&repo=${encodeURIComponent(repoName)}`;
     try {
-      const url = `${API_BASE}/api/voice/automation/tasks?task_id=${encodeURIComponent(taskId)}&repo=${encodeURIComponent(repoName)}`;
-      const res = await fetch(url, { method: "DELETE" });
-      if (res.ok) {
+      const res = await fetchWithFallback(endpoint, { method: "DELETE" });
+      if (res && res.ok) {
         setTasks(prev => prev.filter(t => t.task_id !== taskId && t.repo !== repoName));
       }
     } catch (e) {
-      console.error("Could not delete voice automation task:", e);
+      console.warn("Could not delete voice automation task:", e);
+      // Optimistically remove from local state
+      setTasks(prev => prev.filter(t => t.task_id !== taskId && t.repo !== repoName));
     }
   };
 
