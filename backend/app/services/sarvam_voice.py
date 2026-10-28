@@ -147,7 +147,12 @@ class SarvamVoiceService:
         repo_short = repo_lower.split("/")[-1]
         r_compact = re.sub(r"[^a-z0-9]", "", repo_short)
 
-        # 1. Exact match
+        # 0. Exact full repo match or short name match
+        raw_clean = (spoken_query or "").strip().lower()
+        if raw_clean == repo_lower or raw_clean.split("/")[-1] == repo_short:
+            return 1.0
+
+        # 1. Exact match after cleaning fillers
         if clean_q == repo_short or q_compact == r_compact:
             return 1.0
 

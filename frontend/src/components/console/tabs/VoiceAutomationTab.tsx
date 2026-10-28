@@ -67,7 +67,10 @@ export const VoiceAutomationTab = ({
 
   const fetchTasks = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/automation/tasks`);
+      const url = currentUser
+        ? `${API_BASE}/api/voice/automation/tasks?username=${encodeURIComponent(currentUser)}`
+        : `${API_BASE}/api/voice/automation/tasks`;
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.tasks)) {
@@ -79,7 +82,7 @@ export const VoiceAutomationTab = ({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentUser]);
 
   // Initial load
   useEffect(() => {
