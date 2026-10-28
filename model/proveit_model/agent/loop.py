@@ -196,6 +196,7 @@ Your diagnostic capabilities:
         injected_env: Optional[Dict[str, str]] = None,
         environment: str = "production",
         branch: str = "main",
+        approved: bool = True,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Type 4 Autonomous Agent Loop: executes verified, deterministic multi-stage deployment with real-time SSE streaming."""
         import re
@@ -241,6 +242,7 @@ Your diagnostic capabilities:
             "proof_hash": None,
             "app_url": f"http://{ec2_ip}:3000",
             "github_token": gh_token,
+            "approved": approved,
         }
 
         yield {
@@ -279,7 +281,7 @@ Your diagnostic capabilities:
             ("inspect_repository", lambda: {"repo_url": repo_clean, "branch": branch}),
             ("inject_repo_environment", lambda: {"repo": repo_clean, "environment": environment}),
             ("connect_to_ec2_instance", lambda: {"instance_id": ec2_id, "public_ip": ec2_ip}),
-            ("evaluate_blast_radius", lambda: {"action": "deploy_ec2", "instance_id": ec2_id, "repo": repo_clean, "port": context.get("port", 3000)}),
+            ("evaluate_blast_radius", lambda: {"action": "deploy_ec2", "instance_id": ec2_id, "repo": repo_clean, "port": context.get("port", 3000), "approved": context.get("approved", True)}),
             ("deploy_to_ec2_instance", lambda: {"instance_id": ec2_id, "public_ip": ec2_ip, "repo_name": repo_clean, "port": context.get("port", 3000), "environment": environment, "branch": branch, "github_token": context.get("github_token", "")}),
             ("verify_ec2_health_probe", lambda: {"public_ip": ec2_ip, "port": context.get("port", 3000), "path": "/health"}),
             ("commit_to_proof_ledger", lambda: {"instance_id": ec2_id, "repo_name": repo_clean, "public_ip": ec2_ip, "port": context.get("port", 3000), "status": "PROVEN"}),
@@ -331,6 +333,27 @@ Your diagnostic capabilities:
                 "timestamp": time.time(),
             }
             await asyncio.sleep(0.4)
+
+            # Security Policy Gate Enforcement: Halt immediately if blast radius policy blocks the action
+            if tool_name == "evaluate_blast_radius" and isinstance(result, dict) and result.get("allowed") is False:
+                score = result.get("blast_radius", 50)
+                reasons_str = "; ".join(result.get("reasons", ["High blast radius"]))
+                err_msg = f"Blast Radius Policy Gate: Score {score}/100 exceeds policy threshold. Deployment to {environment} requires explicit human approval. Reasons: {reasons_str}"
+                yield {
+                    "type": "POLICY_VIOLATION",
+                    "run_id": run_id,
+                    "error": err_msg,
+                    "verdict": result,
+                    "timestamp": time.time(),
+                }
+                yield {
+                    "type": "RUN_ERROR",
+                    "run_id": run_id,
+                    "error": err_msg,
+                    "failed_stage": tool_name,
+                    "timestamp": time.time(),
+                }
+                return
 
             if tool_name == "verify_ec2_health_probe" and (is_self_heal_scenario or is_err):
                 # Anomaly detected!

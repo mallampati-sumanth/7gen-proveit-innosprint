@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { EC2InstanceItem, API_BASE } from "../types";
+import { EC2InstanceItem, API_BASE, getAuthHeaders } from "../types";
 import { I } from "../icons";
 
 export const EC2FleetTab = ({
@@ -36,7 +36,10 @@ export const EC2FleetTab = ({
   const handlePowerAction = async (instId: string, action: "start" | "stop") => {
     setPowerActionId(instId);
     try {
-      await fetch(`${API_BASE}/api/agent/ec2/instances/${instId}/${action}`, { method: "POST" });
+      await fetch(`${API_BASE}/api/agent/ec2/instances/${instId}/${action}`, {
+        method: "POST",
+        headers: { ...getAuthHeaders() },
+      });
       await onRefresh();
     } catch {}
     setPowerActionId(null);
@@ -51,7 +54,10 @@ export const EC2FleetTab = ({
 
     setTerminatingId(inst.instance_id);
     try {
-      await fetch(`${API_BASE}/api/agent/ec2/instances/${inst.instance_id}/terminate`, { method: "POST" });
+      await fetch(`${API_BASE}/api/agent/ec2/instances/${inst.instance_id}/terminate`, {
+        method: "POST",
+        headers: { ...getAuthHeaders() },
+      });
       await onRefresh();
     } catch (err: any) {
       alert(err.message || "Failed to terminate instance.");
@@ -63,7 +69,10 @@ export const EC2FleetTab = ({
   const testInstance = async (inst: EC2InstanceItem) => {
     setTestingId(inst.instance_id);
     try {
-      const res = await fetch(`${API_BASE}/api/agent/ec2/instances/${inst.instance_id}/test`, { method: "POST" });
+      const res = await fetch(`${API_BASE}/api/agent/ec2/instances/${inst.instance_id}/test`, {
+        method: "POST",
+        headers: { ...getAuthHeaders() },
+      });
       const data = await res.json();
       setTestResult(p => ({
         ...p,
@@ -90,7 +99,7 @@ export const EC2FleetTab = ({
     try {
       await fetch(`${API_BASE}/api/agent/ec2/instances`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
           name: newInstanceName.trim() || `EC2-${newIp.trim()}`,
           public_ip: newIp.trim(),

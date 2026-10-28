@@ -563,10 +563,11 @@ class ToolExecutor:
                 instance_id = arguments.get("instance_id") or context.get("ec2_id", "i-0a8f9c12345678")
                 repo = arguments.get("repo") or context.get("target_repo", "")
                 port = arguments.get("port") or context.get("port", 3000)
+                is_approved = bool(arguments.get("approved") if "approved" in arguments else context.get("approved", True))
                 verdict = self.guard.evaluate(
                     action=action,
                     environment=context.get("environment", "production"),
-                    parameters={"instance_id": instance_id, "repo": repo, "port": port},
+                    parameters={"instance_id": instance_id, "repo": repo, "port": port, "approved": is_approved},
                 )
                 return verdict.model_dump() if hasattr(verdict, "model_dump") else verdict.dict()
 

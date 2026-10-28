@@ -81,6 +81,14 @@ export const API_BASE =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   "http://localhost:8000";
 
+export function getAuthHeaders(): Record<string, string> {
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("proveit_token");
+    if (token) return { Authorization: `Bearer ${token}` };
+  }
+  return {};
+}
+
 /* ─────────── THEME TOKENS ─────────── */
 export const THEME_VARS: Record<ThemeMode, Record<string, string>> = {
   light: {

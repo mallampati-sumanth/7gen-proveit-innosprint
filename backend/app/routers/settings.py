@@ -5,6 +5,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from backend.app.config import settings
+from backend.app.routers.auth import get_current_user_obj
+from backend.app.entities.models import User
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -171,7 +173,10 @@ def get_platform_settings() -> Dict[str, Any]:
 
 
 @router.post("")
-def update_platform_settings(req: SettingsUpdateRequest) -> Dict[str, Any]:
+def update_platform_settings(
+    req: SettingsUpdateRequest,
+    current_user: User = Depends(get_current_user_obj),
+) -> Dict[str, Any]:
     """Updates runtime platform settings, synchronizes engine config, and persists keys to .env."""
     req_dict = req.model_dump(exclude_unset=True)
     

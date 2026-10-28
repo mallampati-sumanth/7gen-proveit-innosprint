@@ -11,7 +11,8 @@ from sqlmodel import Session, select
 
 from backend.app.config import settings
 from backend.app.db import get_session
-from backend.app.entities.models import Run, LedgerEntry, RepoConfig, RepoEnvVar, decrypt_secret
+from backend.app.entities.models import Run, LedgerEntry, RepoConfig, RepoEnvVar, User, decrypt_secret
+from backend.app.routers.auth import get_current_user_obj
 from backend.app.providers.registry import cloud_registry
 from backend.app.services.self_healing import sre_service, DiagnosisResult
 
@@ -142,7 +143,11 @@ async def get_cloud_deployment_status(
 
 
 @router.post("/deploy")
-async def deploy_to_cloud(req: MultiCloudDeployRequest, session: Session = Depends(get_session)):
+async def deploy_to_cloud(
+    req: MultiCloudDeployRequest,
+    current_user: User = Depends(get_current_user_obj),
+    session: Session = Depends(get_session)
+):
     """
     Unified Multi-Cloud Deployment Dispatcher:
     Deploys application to Vercel, Render, Railway, Netlify, or AWS EC2 without leaving ProveIt.

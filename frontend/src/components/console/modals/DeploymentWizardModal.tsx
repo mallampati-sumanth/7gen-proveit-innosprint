@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { RepoItem, EC2InstanceItem, EnvTarget, API_BASE } from "../types";
+import { RepoItem, EC2InstanceItem, EnvTarget, API_BASE, getAuthHeaders } from "../types";
 import { I } from "../icons";
 
 interface CloudProviderOption {
@@ -197,7 +197,7 @@ export const DeploymentWizardModal = ({
     try {
       const res = await fetch(`${API_BASE}/api/multicloud/heal`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
           target_service: `${provider}:${repo.split("/").pop()}`,
           error_log: errorLog,

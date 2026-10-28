@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { API_BASE } from "../types";
+import { API_BASE, getAuthHeaders } from "../types";
 import { I } from "../icons";
 
 export const EC2ProvisionWizardModal = ({
@@ -60,7 +60,7 @@ export const EC2ProvisionWizardModal = ({
     try {
       const res = await fetch(`${API_BASE}/api/agent/ec2/provision`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
           name: instanceName,
           instance_type: instanceType,

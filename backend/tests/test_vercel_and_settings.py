@@ -37,6 +37,17 @@ async def test_vercel_provider_unconfigured_sandbox():
 
 def test_settings_api_get_and_update():
     """Verify GET and POST /api/settings update and retrieve runtime configurations."""
+    from backend.app.routers.auth import create_access_token
+    from backend.app.config import settings as app_settings
+    from backend.app.entities.models import User
+    from backend.app.db import engine
+    from sqlmodel import Session, select
+
+    with Session(engine) as session:
+        admin_u = session.exec(select(User).where(User.username == app_settings.DEMO_USERNAME)).first()
+        tok = create_access_token({"sub": admin_u.username, "email": admin_u.email, "uid": admin_u.user_id}) if admin_u else ""
+    auth_headers = {"Authorization": f"Bearer {tok}"}
+
     # Test GET /api/settings
     get_res = client.get("/api/settings")
     assert get_res.status_code == 200
@@ -46,18 +57,29 @@ def test_settings_api_get_and_update():
     assert "max_container_memory_mb" in data
 
     # Test updating a harmless runtime setting (e.g., max_container_memory_mb)
-    post_res = client.post("/api/settings", json={"max_container_memory_mb": 2048})
+    post_res = client.post("/api/settings", json={"max_container_memory_mb": 2048}, headers=auth_headers)
     assert post_res.status_code == 200
     res_data = post_res.json()
     assert res_data["status"] == "success"
     assert res_data["settings"]["max_container_memory_mb"] == 2048
 
     # Restore setting
-    client.post("/api/settings", json={"max_container_memory_mb": 1024})
+    client.post("/api/settings", json={"max_container_memory_mb": 1024}, headers=auth_headers)
 
 
 def test_settings_aws_credentials_storing():
     """Verify that AWS Access Key ID, Secret Key, and Region store and retrieve properly."""
+    from backend.app.routers.auth import create_access_token
+    from backend.app.config import settings as app_settings
+    from backend.app.entities.models import User
+    from backend.app.db import engine
+    from sqlmodel import Session, select
+
+    with Session(engine) as session:
+        admin_u = session.exec(select(User).where(User.username == app_settings.DEMO_USERNAME)).first()
+        tok = create_access_token({"sub": admin_u.username, "email": admin_u.email, "uid": admin_u.user_id}) if admin_u else ""
+    auth_headers = {"Authorization": f"Bearer {tok}"}
+
     res = client.get("/api/settings")
     assert res.status_code == 200
     data = res.json()
@@ -71,7 +93,7 @@ def test_settings_aws_credentials_storing():
         "aws_region": "us-east-1",
         "aws_access_key_id": "AKIAXSVLTBTDT3GVIBPA",
         "aws_secret_access_key": "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",
-    })
+    }, headers=auth_headers)
     assert up_res.status_code == 200
     u_data = up_res.json()
     assert u_data["status"] == "success"

@@ -15,6 +15,7 @@ import {
   RepoItem,
   EC2InstanceItem,
   API_BASE,
+  getAuthHeaders,
   THEME_VARS,
   PAGE_META,
   STAGE_META,
@@ -232,7 +233,10 @@ function MainApp() {
   const handleDeleteRepo = async (repoId: string) => {
     if (!confirm(`Are you sure you want to disconnect repository ${repoId}?`)) return;
     try {
-      await fetch(`${API_BASE}/api/agent/repos/${repoId}`, { method: "DELETE" });
+      await fetch(`${API_BASE}/api/agent/repos/${repoId}`, {
+        method: "DELETE",
+        headers: { ...getAuthHeaders() },
+      });
       loadData();
     } catch { }
   };
@@ -415,7 +419,7 @@ function MainApp() {
         const storedPat = (typeof window !== "undefined" ? localStorage.getItem("proveit_github_pat") : null) || "";
         const res = await fetch(`${API_BASE}/api/multicloud/deploy`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
           body: JSON.stringify({
             repo_name: chosenRepo,
             provider: providerParam,
@@ -578,7 +582,7 @@ function MainApp() {
 
       const deployRes = await fetch(`${API_BASE}/api/agent/deploy`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
           prompt: t,
           target_repo: chosenRepo,

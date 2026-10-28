@@ -21,6 +21,7 @@ if model_path not in sys.path:
 
 from backend.app.config import settings
 from backend.app.db import get_session
+from backend.app.routers.auth import get_current_user_obj
 from backend.app.entities.models import (
     Run,
     Event,
@@ -552,7 +553,11 @@ def add_repository(req: RepoAddRequest, session: Session = Depends(get_session))
 
 
 @router.delete("/repos/{repo_id:path}")
-def delete_repository(repo_id: str, session: Session = Depends(get_session)):
+def delete_repository(
+    repo_id: str,
+    current_user: User = Depends(get_current_user_obj),
+    session: Session = Depends(get_session)
+):
     """Remove a connected repository and its environment variables."""
     repo_clean = repo_id.strip("/")
     repo = session.exec(select(RepoConfig).where(RepoConfig.repo_id == repo_clean)).first()
@@ -868,7 +873,10 @@ PROVISION_JOBS: Dict[str, Any] = {}
 
 
 @router.post("/ec2/provision")
-def start_ec2_provision(req: ProvisionEC2Request):
+def start_ec2_provision(
+    req: ProvisionEC2Request,
+    current_user: User = Depends(get_current_user_obj),
+):
     """Initiates automated EC2 provisioning with recommended settings and returns a streaming job ID."""
     job_id = f"job-prov-{hashlib.md5(f'{req.name}{time.time()}'.encode()).hexdigest()[:8]}"
     PROVISION_JOBS[job_id] = {
@@ -1030,7 +1038,11 @@ def start_ec2_instance(instance_id: str, session: Session = Depends(get_session)
 
 
 @router.post("/ec2/instances/{instance_id}/stop")
-def stop_ec2_instance(instance_id: str, session: Session = Depends(get_session)):
+def stop_ec2_instance(
+    instance_id: str,
+    current_user: User = Depends(get_current_user_obj),
+    session: Session = Depends(get_session)
+):
     """Stop a running EC2 instance in AWS."""
     inst = session.exec(select(EC2Instance).where(EC2Instance.instance_id == instance_id)).first()
     has_aws_creds = bool(settings.AWS_ACCESS_KEY_ID and not settings.AWS_ACCESS_KEY_ID.startswith("your_"))
@@ -1056,7 +1068,11 @@ def stop_ec2_instance(instance_id: str, session: Session = Depends(get_session))
 
 @router.post("/ec2/instances/{instance_id}/terminate")
 @router.delete("/ec2/instances/{instance_id}")
-def terminate_ec2_instance(instance_id: str, session: Session = Depends(get_session)):
+def terminate_ec2_instance(
+    instance_id: str,
+    current_user: User = Depends(get_current_user_obj),
+    session: Session = Depends(get_session)
+):
     """Terminate and permanently delete an EC2 instance in AWS and clean from fleet."""
     global LAST_EC2_DESCRIBE_TIME
     LAST_EC2_DESCRIBE_TIME = 0  # Invalidate cache so next fleet list is fresh
@@ -1255,7 +1271,11 @@ async def chat_with_agent(req: ChatRequest, session: Session = Depends(get_sessi
 
 
 @router.post("/deploy")
-def start_deployment(req: DeployRequest, session: Session = Depends(get_session)):
+def start_deployment(
+    req: DeployRequest,
+    current_user: User = Depends(get_current_user_obj),
+    session: Session = Depends(get_session)
+):
     """Start autonomous deployment of target repo to EC2 instance with .env injection."""
     run_id = f"run-{hashlib.md5(f'{req.prompt}{time.time()}'.encode()).hexdigest()[:8]}"
     
@@ -1322,6 +1342,7 @@ def start_deployment(req: DeployRequest, session: Session = Depends(get_session)
 
     run = Run(
         run_id=run_id,
+        user_id=current_user.user_id,
         prompt=req.prompt,
         target_repo=target_repo,
         target_ec2=target_ec2,

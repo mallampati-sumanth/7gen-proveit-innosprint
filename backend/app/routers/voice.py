@@ -1233,7 +1233,7 @@ async def agent_deploy_repository(req: AgentDeployRequest, session: Session = De
         if not matched_repo:
             matched_repo = sarvam_voice_service.match_repository(raw_repo, user_repos)
     if not matched_repo:
-        if raw_repo and raw_repo in user_repos:
+        if raw_repo and ("/" in raw_repo or raw_repo in user_repos):
             matched_repo = raw_repo
         else:
             # Check if caller recently searched/checked a repo during this call
@@ -1685,6 +1685,8 @@ def get_voice_automation_tasks(username: Optional[str] = None, session: Session 
     ).all()
     for r in running_runs:
         if r.run_id and r.run_id not in seen_run_ids:
+            if not ((r.prompt and ("voice" in r.prompt.lower() or "voiceops" in r.prompt.lower())) or log_by_run.get(r.run_id)):
+                continue
             try:
                 r_time = r.created_at
                 if r_time.tzinfo is None:
