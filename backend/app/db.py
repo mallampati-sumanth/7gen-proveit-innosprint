@@ -80,8 +80,13 @@ def init_db() -> None:
                 # Auto-migrate repoconfig table columns
                 res_repo = conn.execute(text("PRAGMA table_info('repoconfig');"))
                 existing_repo_cols = {row[1] for row in res_repo.fetchall()}
-                if "user_id" not in existing_repo_cols:
-                    conn.execute(text('ALTER TABLE "repoconfig" ADD COLUMN user_id VARCHAR;'))
+                repo_cols_to_add = [
+                    ("user_id", "VARCHAR"),
+                    ("root_directory", "VARCHAR"),
+                ]
+                for col_name, col_def in repo_cols_to_add:
+                    if col_name not in existing_repo_cols:
+                        conn.execute(text(f'ALTER TABLE "repoconfig" ADD COLUMN {col_name} {col_def};'))
 
                 conn.commit()
             except Exception:
@@ -99,6 +104,7 @@ def init_db() -> None:
                 conn.execute(text('ALTER TABLE "run" ADD COLUMN IF NOT EXISTS blast_radius_score FLOAT;'))
                 conn.execute(text('ALTER TABLE "run" ADD COLUMN IF NOT EXISTS sandbox_tested BOOLEAN;'))
                 conn.execute(text('ALTER TABLE "repoconfig" ADD COLUMN IF NOT EXISTS user_id VARCHAR;'))
+                conn.execute(text('ALTER TABLE "repoconfig" ADD COLUMN IF NOT EXISTS root_directory VARCHAR;'))
                 conn.commit()
             except Exception:
                 pass

@@ -96,7 +96,7 @@ async def test_netlify_provider_fails_on_api_error():
 async def test_railway_provider_fails_on_api_error():
     """Verify RailwayProvider returns status=FAILED when configured API returns an error instead of fake READY."""
     prov = RailwayProvider(token="rw_test_mock_token_12345678")
-    
+
     mock_response = MagicMock()
     mock_response.status_code = 500
     mock_response.headers = {"Content-Type": "application/json"}
@@ -107,3 +107,18 @@ async def test_railway_provider_fails_on_api_error():
         res = await prov.deploy_repository(repo_name="org/myrepo", branch="main")
         assert res.status == "FAILED"
         assert res.live_url == ""
+
+
+def test_repos_endpoint_and_cors_headers():
+    """Verify /api/agent/repos and /api/agent/github/connect respond with CORS headers without 500 schema error."""
+    # GET /api/agent/repos
+    res = client.get("/api/agent/repos", headers={"Origin": "http://localhost:3000"})
+    assert res.status_code == 200
+    assert res.headers.get("access-control-allow-origin") == "http://localhost:3000"
+    data = res.json()
+    assert isinstance(data, list)
+
+    # POST /api/agent/github/connect
+    res2 = client.post("/api/agent/github/connect", json={"token": "invalid_test_token"}, headers={"Origin": "http://localhost:3000"})
+    assert res2.status_code in [400, 401]
+    assert res2.headers.get("access-control-allow-origin") == "http://localhost:3000"
