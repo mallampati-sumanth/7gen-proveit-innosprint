@@ -233,10 +233,11 @@ async def deploy_to_cloud(
         # AWS fallback
         rand_hash = hashlib.md5(f"{clean_repo}{time.time()}".encode()).hexdigest()[:8]
         dpl_id = f"aws-ec2-{rand_hash}"
-        live_url = f"http://54.210.14.88:8000"
+        target_ip = "98.84.98.57"
+        live_url = f"http://{target_ip}:8000"
         logs = [
-            f"Target: AWS EC2 Instance (us-east-1)",
-            f"Cloned {clean_repo} to /opt/proveit/apps/{clean_repo} (branch: {active_branch})",
+            f"Target: AWS EC2 Instance ({target_ip})",
+            f"Cloned {clean_repo} to /home/ubuntu/apps/{clean_repo} (branch: {active_branch})",
             f"Injected {len(merged_env)} environment variables into {target_env} container",
             f"Docker daemon built container proveit/{clean_repo}:latest",
             f"Container running on port 8000 (0.0.0.0:8000->8000/tcp)",

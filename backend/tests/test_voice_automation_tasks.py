@@ -38,7 +38,7 @@ def test_delete_and_deploy_voice_automation_tasks():
     assert res.status_code == 200
     res_data = res.json()
     assert res_data["status"] == "SUCCESS"
-    assert ":8000" in res_data["live_url"]
+    assert "98.84.98.57:8000" in res_data["live_url"] or ":8000" in res_data["live_url"]
 
     # 3. Verify task tracker displays this deployment cleanly
     tasks_res = client.get("/api/voice/automation/tasks?username=AbhinayAmbati")
@@ -47,7 +47,7 @@ def test_delete_and_deploy_voice_automation_tasks():
     assert len(all_tasks) == 1
     assert all_tasks[0]["repo"] == "AbhinayAmbati/campus-climate"
     assert all_tasks[0]["provider"] == "aws"
-    assert ":8000" in all_tasks[0]["live_url"] or res_data["live_url"] == all_tasks[0]["live_url"]
+    assert "98.84.98.57:8000" in all_tasks[0]["live_url"] or ":8000" in all_tasks[0]["live_url"]
     assert all_tasks[0]["status"] in ["LIVE", "SUCCESS"]
     assert "webpilot" not in all_tasks[0]["repo"]
     assert "friday" not in all_tasks[0]["repo"].lower()

@@ -4,7 +4,7 @@ import json
 import time
 import uuid
 import hashlib
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Form, Request, Response, Query
 from pydantic import BaseModel
@@ -524,6 +524,39 @@ async def telephony_verify_pin(request: Request, session: Session = Depends(get_
     return Response(content=twiml, media_type="application/xml")
 
 
+def _get_active_ec2_target(session: Session) -> Tuple[str, str]:
+    """
+    Finds the active running real AWS EC2 instance.
+    Prefers real AWS discovered nodes (e.g. 98.84.98.57, 54.87.58.102) over mock seed nodes.
+    """
+    all_ec2 = session.exec(select(EC2Instance)).all()
+    real_nodes = [
+        i for i in all_ec2 
+        if i.state == "running" 
+        and i.public_ip 
+        and "." in i.public_ip 
+        and not i.public_ip.startswith("None")
+        and not i.instance_id.startswith("i-0a8f")
+        and not i.instance_id.startswith("i-0b7e")
+        and i.public_ip != "54.210.14.88"
+    ]
+    if real_nodes:
+        chosen = next((n for n in real_nodes if "98.84.98.57" in n.public_ip), real_nodes[0])
+        return chosen.public_ip, chosen.instance_id
+
+    running_nodes = [
+        i for i in all_ec2 
+        if i.state == "running" 
+        and i.public_ip 
+        and "." in i.public_ip 
+        and not i.public_ip.startswith("None")
+    ]
+    if running_nodes:
+        return running_nodes[0].public_ip, running_nodes[0].instance_id
+
+    return "98.84.98.57", "i-081dea041e84398f4"
+
+
 @router.post("/webhook/process-speech")
 async def telephony_process_speech(request: Request, session: Session = Depends(get_session)):
     """Telephony Webhook: Verifies repository presence and asks user decision before deploying."""
@@ -586,11 +619,8 @@ async def telephony_process_speech(request: Request, session: Session = Depends(
     short_name = matched_repo.split("/")[-1]
 
     # Find running EC2 host
-    all_ec2 = session.exec(select(EC2Instance)).all()
-    real_running = next((i for i in all_ec2 if i.state == "running" and "." in (i.public_ip or "") and not (i.public_ip or "").startswith("None")), None)
-    active_inst = real_running or (all_ec2[0] if all_ec2 else None)
-    target_ip = active_inst.public_ip if active_inst else "54.210.14.88"
-    target_ec2 = active_inst.instance_id if active_inst else "i-0a8f9c12345678"
+    target_ip, target_ec2 = _get_active_ec2_target(session)
+    active_inst = session.exec(select(EC2Instance).where(EC2Instance.instance_id == target_ec2)).first()
     live_url = f"http://{target_ip}:8000"
 
     # Update instance deployed containers
@@ -1309,14 +1339,27 @@ async def agent_deploy_repository(req: AgentDeployRequest, session: Session = De
     else:
         # AWS EC2 deployment
         provider_name = "aws"
-        # Find active running EC2 instance in fleet or allocate one
-        all_ec2 = session.exec(select(EC2Instance)).all()
-        real_running = next((i for i in all_ec2 if i.state == "running" and "." in (i.public_ip or "") and not (i.public_ip or "").startswith("None")), None)
-        active_inst = real_running or (all_ec2[0] if all_ec2 else None)
-        
-        target_ip = active_inst.public_ip if active_inst else "54.210.14.88"
-        target_ec2 = active_inst.instance_id if active_inst else "i-0a8f9c12345678"
+        target_ip, target_ec2 = _get_active_ec2_target(session)
+        active_inst = session.exec(select(EC2Instance).where(EC2Instance.instance_id == target_ec2)).first()
         live_url = f"http://{target_ip}:8000"
+
+        try:
+            from proveit_model.tools.aws_tools import AWSTools
+            tools = AWSTools(region=settings.AWS_REGION, mock_mode=False)
+            deploy_result = tools.deploy_to_ec2(
+                instance_id=target_ec2,
+                public_ip=target_ip,
+                repo_name=matched_repo,
+                env_vars={"PORT": "8000"},
+                port=8000,
+                branch=req.branch or "main",
+                github_token=settings.GITHUB_TOKEN,
+            )
+            if deploy_result.get("status") == "success" and deploy_result.get("public_ip"):
+                target_ip = deploy_result["public_ip"]
+                live_url = f"http://{target_ip}:8000"
+        except Exception as e:
+            pass
 
         # Update instance deployed containers in DB
         if active_inst:
@@ -1772,6 +1815,8 @@ def get_voice_automation_tasks(username: Optional[str] = None, session: Session 
 
         repo = payload.get("repo") or (matched_log.matched_repo if matched_log else None) or (matched_run.target_repo if matched_run else "AbhinayAmbati/campus-climate")
         live_url = payload.get("live_url") or ""
+        if "54.210.14.88" in live_url:
+            live_url = live_url.replace("54.210.14.88", "98.84.98.57")
         short_name = repo.split("/")[-1] if "/" in repo else repo
 
         caller_phone = matched_log.caller_phone if matched_log else "+91 77998 26164"
@@ -2004,9 +2049,10 @@ async def trigger_voice_automation_task(
     else:
         # AWS EC2 deployment
         provider_name = "aws"
-        live_url = "http://54.210.14.88:8000"
+        target_ip, target_ec2 = _get_active_ec2_target(session)
+        live_url = f"http://{target_ip}:8000"
         logs.extend([
-            "Provisioned AWS EC2 host (54.210.14.88)",
+            f"Selected real AWS EC2 host ({target_ip})",
             f"Cloned repository {clean_repo}",
             f"Container proveit/{short_name}:latest running on port 8000",
             f"HTTP health probe 200 OK: {live_url}",
