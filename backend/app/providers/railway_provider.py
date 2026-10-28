@@ -33,14 +33,14 @@ class RailwayProvider(BaseCloudProvider):
         commit_hash: Optional[str] = None,
         service_type: Optional[str] = None,
         github_token: Optional[str] = None,
+        environment: str = "production",
+        root_directory: Optional[str] = None,
         **kwargs: Any,
     ) -> DeploymentResult:
         clean_repo = re.sub(r"[^a-zA-Z0-9\-]", "-", repo_name.split("/")[-1]).lower()[:100].strip("-")
         rand_hash = hashlib.md5(f"{repo_name}{time.time()}".encode()).hexdigest()[:8]
         deployment_id = f"rw_{rand_hash}"
         live_domain = f"{clean_repo}-{rand_hash}.up.railway.app"
-
-        fallback_logs_prefix = []
 
         if await self.is_configured():
             try:
@@ -63,7 +63,21 @@ class RailwayProvider(BaseCloudProvider):
                         headers=headers,
                     )
                     if resp.status_code == 200:
-                        data = resp.json().get("data", {}).get("projectCreate")
+                        raw_json = resp.json()
+                        errors = raw_json.get("errors")
+                        if errors:
+                            err_msg = errors[0].get("message", "Railway GraphQL Error") if isinstance(errors, list) else str(errors)
+                            return DeploymentResult(
+                                provider=self.name,
+                                deployment_id=deployment_id,
+                                status="FAILED",
+                                live_url="",
+                                build_logs=[
+                                    f"[Railway GraphQL Error] {err_msg}",
+                                ],
+                                metadata={"real_api": True, "error": err_msg},
+                            )
+                        data = raw_json.get("data", {}).get("projectCreate")
                         if data and data.get("id"):
                             proj_id = data["id"]
                             return DeploymentResult(
@@ -82,16 +96,42 @@ class RailwayProvider(BaseCloudProvider):
                                 ],
                                 metadata={"real_api": True, "railway_id": proj_id},
                             )
-                    else:
-                        fallback_logs_prefix = [
-                            f"[Railway GraphQL Notice] Live API responded HTTP {resp.status_code}",
-                            f"[ProveIt Managed Runner] Provisioning Nixpacks container deployment for {clean_repo}...",
-                        ]
+                    err_msg = f"HTTP {resp.status_code}"
+                    return DeploymentResult(
+                        provider=self.name,
+                        deployment_id=deployment_id,
+                        status="FAILED",
+                        live_url="",
+                        build_logs=[
+                            f"[Railway API Error] HTTP {resp.status_code}: {resp.text[:300]}",
+                        ],
+                        metadata={"real_api": True, "error": err_msg, "status_code": resp.status_code},
+                    )
             except Exception as e:
-                fallback_logs_prefix = [
-                    f"[Railway API Connection] {str(e)}",
-                    f"[ProveIt Managed Runner] Provisioning Nixpacks container deployment for {clean_repo}...",
-                ]
+                return DeploymentResult(
+                    provider=self.name,
+                    deployment_id=deployment_id,
+                    status="FAILED",
+                    live_url="",
+                    build_logs=[
+                        f"[Railway Connection Error] {str(e)}",
+                    ],
+                    metadata={"real_api": True, "error": str(e)},
+                )
+
+        # If unconfigured, verify sandbox policy
+        from backend.app.config import settings
+        if not getattr(settings, "MULTICLOUD_SANDBOX_ENABLED", True):
+            return DeploymentResult(
+                provider=self.name,
+                deployment_id=deployment_id,
+                status="FAILED",
+                live_url="",
+                build_logs=[
+                    f"[Railway Config] RAILWAY_TOKEN is not configured and sandbox mode is disabled.",
+                ],
+                metadata={"real_api": False, "error": "Provider not configured"},
+            )
 
         env_count = len(env_vars or {})
         return DeploymentResult(
@@ -100,13 +140,14 @@ class RailwayProvider(BaseCloudProvider):
             status="READY",
             live_url=f"https://{live_domain}",
             preview_url=f"https://{live_domain}",
-            build_logs=fallback_logs_prefix + [
-                f"[Railway Nixpacks] Building container image from github.com/{repo_name} (branch: {branch})",
+            build_logs=[
+                f"[Railway Sandbox] Zero-config Nixpacks preview runner for {repo_name}",
+                f"[Railway Source] github.com/{repo_name} (branch: {branch})",
                 f"[Railway Runtime] Detected configuration: {service_type or 'multi-language container'}",
                 f"[Railway Environment] Injected {env_count} runtime environment variables",
-                f"[Railway Storage] Attached persistent storage volume",
+                f"[Railway Storage] Attached persistent preview storage",
                 f"[Railway Ingress] Routing traffic on port 80/443 -> container",
-                f"[Railway Health Check] Container health probe passed. Edge domain: https://{live_domain}"
+                f"[Railway Preview] https://{live_domain}"
             ],
             metadata={
                 "runtime": service_type or "nixpacks/docker",
@@ -114,7 +155,7 @@ class RailwayProvider(BaseCloudProvider):
                 "commit": commit_hash or rand_hash,
                 "injected_env_count": env_count,
                 "ephemeral_storage_mb": 1024,
-                "mode": "live_managed",
+                "mode": "managed_sandbox",
             },
         )
 

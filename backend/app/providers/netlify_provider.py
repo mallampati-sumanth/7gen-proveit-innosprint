@@ -33,14 +33,14 @@ class NetlifyProvider(BaseCloudProvider):
         commit_hash: Optional[str] = None,
         service_type: Optional[str] = None,
         github_token: Optional[str] = None,
+        environment: str = "production",
+        root_directory: Optional[str] = None,
         **kwargs: Any,
     ) -> DeploymentResult:
         clean_repo = re.sub(r"[^a-zA-Z0-9\-]", "-", repo_name.split("/")[-1]).lower()[:100].strip("-")
         rand_hash = hashlib.md5(f"{repo_name}{time.time()}".encode()).hexdigest()[:8]
         site_id = f"site_{rand_hash}"
         live_domain = f"{clean_repo}-{rand_hash}.netlify.app"
-
-        fallback_logs_prefix = []
 
         # If live Netlify token is configured, call Netlify REST API v1
         if await self.is_configured():
@@ -58,7 +58,7 @@ class NetlifyProvider(BaseCloudProvider):
                     },
                     "build_settings": {
                         "cmd": "npm run build",
-                        "dir": "dist",
+                        "dir": root_directory or "dist",
                     }
                 }
                 if env_vars:
@@ -87,15 +87,42 @@ class NetlifyProvider(BaseCloudProvider):
                     else:
                         err_data = resp.json() if "application/json" in resp.headers.get("Content-Type", "") else {"message": resp.text}
                         err_msg = err_data.get("message") or f"HTTP {resp.status_code}"
-                        fallback_logs_prefix = [
-                            f"[Netlify API Status] HTTP {resp.status_code}: {err_msg}",
-                            f"[ProveIt Managed Runner] Provisioning zero-config edge sandbox for {clean_repo}...",
-                        ]
+                        return DeploymentResult(
+                            provider=self.name,
+                            deployment_id=site_id,
+                            status="FAILED",
+                            live_url="",
+                            build_logs=[
+                                f"[Netlify API Error] HTTP {resp.status_code}: {err_msg}",
+                                f"[Netlify Notice] Ensure token has permissions to create sites in your Netlify account.",
+                            ],
+                            metadata={"real_api": True, "error": err_msg, "status_code": resp.status_code},
+                        )
             except Exception as e:
-                fallback_logs_prefix = [
-                    f"[Netlify API Connection] {str(e)}",
-                    f"[ProveIt Managed Runner] Provisioning zero-config edge sandbox for {clean_repo}...",
-                ]
+                return DeploymentResult(
+                    provider=self.name,
+                    deployment_id=site_id,
+                    status="FAILED",
+                    live_url="",
+                    build_logs=[
+                        f"[Netlify Connection Error] {str(e)}",
+                    ],
+                    metadata={"real_api": True, "error": str(e)},
+                )
+
+        # If unconfigured, verify sandbox policy
+        from backend.app.config import settings
+        if not getattr(settings, "MULTICLOUD_SANDBOX_ENABLED", True):
+            return DeploymentResult(
+                provider=self.name,
+                deployment_id=site_id,
+                status="FAILED",
+                live_url="",
+                build_logs=[
+                    f"[Netlify Config] NETLIFY_TOKEN is not configured and sandbox mode is disabled.",
+                ],
+                metadata={"real_api": False, "error": "Provider not configured"},
+            )
 
         # Managed Provider Sandbox (Zero-Config Preview)
         env_count = len(env_vars or {})
@@ -105,14 +132,14 @@ class NetlifyProvider(BaseCloudProvider):
             status="READY",
             live_url=f"https://{live_domain}",
             preview_url=f"https://{live_domain}",
-            build_logs=fallback_logs_prefix + [
-                f"Netlify Build Container initialized for {repo_name}",
+            build_logs=[
+                f"[Netlify Sandbox] Zero-config preview runner initialized for {repo_name}",
                 f"Fetching source from github.com/{repo_name} (branch: {branch})... OK",
                 f"Environment: Injected {env_count} runtime variables into build matrix",
                 f"Detected build command: npm run build / yarn build",
                 f"Hashing and distributing assets across Netlify Global Edge Network",
                 f"SSL certificate automatically provisioned by Let's Encrypt",
-                f"Site is live: https://{live_domain}",
+                f"Site preview: https://{live_domain}",
             ],
             metadata={
                 "framework": service_type or "jamstack",
@@ -120,7 +147,7 @@ class NetlifyProvider(BaseCloudProvider):
                 "commit": commit_hash or rand_hash,
                 "cdn_nodes": 64,
                 "injected_env_count": env_count,
-                "mode": "live_managed",
+                "mode": "managed_sandbox",
             },
         )
 

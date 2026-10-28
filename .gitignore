@@ -59,3 +59,4 @@ Thumbs.db
 .playwright-mcp/
 backend/keys/*.pem
 backend/keys/*.pub
+docs/local/*

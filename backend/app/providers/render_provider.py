@@ -714,8 +714,14 @@ class RenderProvider(BaseCloudProvider):
                     d_res = await client.get(deploy_url, headers=headers)
                     if d_res.status_code == 200:
                         d_raw = d_res.json()
-                        d_obj = d_raw[0].get("deploy", {}) if isinstance(d_raw, list) and d_raw else d_raw
-                        render_status = (d_obj.get("status") or "live").lower()
+                        if isinstance(d_raw, list):
+                            d_obj = d_raw[0].get("deploy", d_raw[0]) if (d_raw and isinstance(d_raw[0], dict)) else {}
+                        elif isinstance(d_raw, dict):
+                            d_obj = d_raw.get("deploy", d_raw) if isinstance(d_raw.get("deploy"), dict) else d_raw
+                        else:
+                            d_obj = {}
+
+                        render_status = (d_obj.get("status") or "live").lower() if isinstance(d_obj, dict) else "live"
 
                         status_map = {
                             "live": "READY",
@@ -729,6 +735,10 @@ class RenderProvider(BaseCloudProvider):
                         }
                         mapped_status = status_map.get(render_status, "READY")
 
+                        commit_info = d_obj.get("commit", {}) if isinstance(d_obj, dict) else {}
+                        commit_msg = commit_info.get("message", "Latest commit on connected branch") if isinstance(commit_info, dict) else str(commit_info)
+                        finished_at = (d_obj.get("finishedAt") or d_obj.get("createdAt") or "N/A") if isinstance(d_obj, dict) else "N/A"
+
                         return DeploymentResult(
                             provider=self.name,
                             deployment_id=deployment_id,
@@ -736,10 +746,10 @@ class RenderProvider(BaseCloudProvider):
                             live_url=live_url,
                             build_logs=[
                                 f"[Render Real-Time Status] Service {service_id} state: {render_status.upper()}",
-                                f"[Commit] {d_obj.get('commit', {}).get('message', 'Latest commit on connected branch')}",
-                                f"[Finished] {d_obj.get('finishedAt') or d_obj.get('createdAt')}",
+                                f"[Commit] {commit_msg}",
+                                f"[Finished] {finished_at}",
                             ],
-                            metadata=d_obj,
+                            metadata=d_obj if isinstance(d_obj, dict) else {"raw": d_raw},
                         )
             except Exception as e:
                 logger.warning(f"Error checking live Render deployment status: {e}")

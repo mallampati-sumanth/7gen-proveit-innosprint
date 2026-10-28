@@ -288,7 +288,7 @@ async def deploy_to_cloud(req: MultiCloudDeployRequest, session: Session = Depen
 
 
 @router.get("/status/{provider_name}/{deployment_id}")
-async def get_cloud_deployment_status(provider_name: str, deployment_id: str):
+async def get_cloud_deployment_status_by_path(provider_name: str, deployment_id: str):
     """Fetches real-time deployment status from the target cloud provider."""
     provider = cloud_registry.get_provider(provider_name.lower().strip())
     if not provider:

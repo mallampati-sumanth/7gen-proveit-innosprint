@@ -83,7 +83,7 @@ def init_db() -> None:
         admin_user = session.exec(select(User).where(User.username == settings.DEMO_USERNAME)).first()
         if not admin_user:
             salt = secrets.token_hex(16)
-            hashed = hashlib.sha256((salt + settings.DEMO_PASSWORD).encode("utf-8")).hexdigest()
+            hashed = hashlib.pbkdf2_hmac("sha256", settings.DEMO_PASSWORD.encode("utf-8"), salt.encode("utf-8"), 100_000).hex()
             admin = User(
                 user_id=f"usr_{uuid.uuid4().hex[:12]}",
                 email="admin@proveit.cloud",
