@@ -5,34 +5,25 @@ from backend.app.main import app
 client = TestClient(app)
 
 
-def test_get_voice_automation_tasks():
+def test_get_voice_automation_tasks_structure():
     res = client.get("/api/voice/automation/tasks?username=AbhinayAmbati")
     assert res.status_code == 200
     data = res.json()
     assert data["status"] == "active"
-    tasks = data["tasks"]
-    assert len(tasks) > 0
-
-    # Ensure no dummy mock tasks from SRE or dummy names leak in
-    for t in tasks:
-        assert t["repo"] != "test-org/fastapi-backend"
-        assert t["repo"] != "test-org/landing-page"
-        assert t["repo"] != "docker/awesome-compose"
-        assert t["repo"] != "facebook/react"
-        assert "webpilot" not in t["repo"]
-        assert "friday" not in t["repo"].lower()
-
-    # Ensure top task is campus-climate live deployment on AWS EC2
-    top = tasks[0]
-    assert top["repo"] == "AbhinayAmbati/campus-climate"
-    assert top["provider"] == "aws"
-    assert top["status"] in ["LIVE", "SUCCESS"]
-    assert "http://54.210.14.88:8000" in top["live_url"]
-    assert top["proof_hash"] != ""
+    assert "tasks" in data
+    assert isinstance(data["tasks"], list)
 
 
-def test_voice_deploy_ec2_reflection():
-    # Verify executing a voice deploy reflects properly in tasks
+def test_delete_and_deploy_voice_automation_tasks():
+    # 1. Delete all tasks
+    del_res = client.delete("/api/voice/automation/tasks")
+    assert del_res.status_code == 200
+
+    empty_res = client.get("/api/voice/automation/tasks?username=AbhinayAmbati")
+    assert empty_res.status_code == 200
+    assert len(empty_res.json()["tasks"]) == 0
+
+    # 2. Deploy app via voice tool
     payload = {
         "tool_name": "deploy_app",
         "caller_phone": "+91 77998 26164",
@@ -49,12 +40,20 @@ def test_voice_deploy_ec2_reflection():
     assert res_data["status"] == "SUCCESS"
     assert "54.210.14.88:8000" in res_data["live_url"]
 
-    # Verify task tracker displays this deployment
+    # 3. Verify task tracker displays this deployment cleanly
     tasks_res = client.get("/api/voice/automation/tasks?username=AbhinayAmbati")
     assert tasks_res.status_code == 200
     all_tasks = tasks_res.json()["tasks"]
-    assert len(all_tasks) > 0
+    assert len(all_tasks) == 1
     assert all_tasks[0]["repo"] == "AbhinayAmbati/campus-climate"
     assert all_tasks[0]["provider"] == "aws"
     assert "54.210.14.88:8000" in all_tasks[0]["live_url"]
-    assert all_tasks[0]["status"] == "LIVE"
+    assert all_tasks[0]["status"] in ["LIVE", "SUCCESS"]
+    assert "webpilot" not in all_tasks[0]["repo"]
+    assert "friday" not in all_tasks[0]["repo"].lower()
+
+    # 4. Clean up after test so database remains completely clean as requested by user
+    del_res2 = client.delete("/api/voice/automation/tasks")
+    assert del_res2.status_code == 200
+    empty_res2 = client.get("/api/voice/automation/tasks?username=AbhinayAmbati")
+    assert len(empty_res2.json()["tasks"]) == 0

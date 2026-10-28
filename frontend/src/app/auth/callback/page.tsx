@@ -61,6 +61,9 @@ function CallbackContent() {
           localStorage.setItem("proveit_user_data", JSON.stringify(data.user));
           if (data.github_token) {
             localStorage.setItem("proveit_github_pat", data.github_token);
+            if (data.user?.username) {
+              localStorage.setItem(`proveit_github_pat_${data.user.username}`, data.github_token);
+            }
           }
         }
 

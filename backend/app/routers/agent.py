@@ -189,9 +189,22 @@ def get_github_profile(
         use_token = cleaned_token
     elif user and user.github_pat:
         use_token = decrypt_secret(user.github_pat)
+    elif user and (user.auth_provider == "github" or user.github_username or user.is_admin) and settings.GITHUB_TOKEN and not settings.GITHUB_TOKEN.startswith("ghp_your"):
+        use_token = settings.GITHUB_TOKEN
+    elif not user and settings.GITHUB_TOKEN and not settings.GITHUB_TOKEN.startswith("ghp_your"):
+        use_token = settings.GITHUB_TOKEN
 
     if not use_token:
         return {"connected": False, "message": "No GitHub account connected."}
+
+    # Auto-persist token on user if missing
+    if user and not user.github_pat and use_token and not use_token.startswith("ghp_your"):
+        try:
+            user.github_pat = encrypt_secret(use_token)
+            session.add(user)
+            session.commit()
+        except Exception:
+            pass
 
     if cleaned_token and user and cleaned_token != settings.GITHUB_TOKEN:
         settings.GITHUB_TOKEN = cleaned_token
@@ -334,6 +347,18 @@ def list_repositories(
         active_tok = cleaned_token
     elif user and user.github_pat:
         active_tok = decrypt_secret(user.github_pat)
+    elif user and (user.auth_provider == "github" or user.github_username or user.is_admin) and settings.GITHUB_TOKEN and not settings.GITHUB_TOKEN.startswith("ghp_your"):
+        active_tok = settings.GITHUB_TOKEN
+    elif not user and settings.GITHUB_TOKEN and not settings.GITHUB_TOKEN.startswith("ghp_your"):
+        active_tok = settings.GITHUB_TOKEN
+
+    if user and not user.github_pat and active_tok and not active_tok.startswith("ghp_your"):
+        try:
+            user.github_pat = encrypt_secret(active_tok)
+            session.add(user)
+            session.commit()
+        except Exception:
+            pass
 
     connected_login = ""
     if active_tok:
@@ -384,7 +409,24 @@ def list_repositories(
 
     query = select(RepoConfig)
     if user and not user.is_admin:
-        query = query.where(RepoConfig.user_id == user.user_id)
+        query = query.where(
+            or_(
+                RepoConfig.user_id == user.user_id,
+                RepoConfig.user_id == None,
+                func.lower(RepoConfig.owner) == user.username.lower(),
+                func.lower(RepoConfig.owner) == (user.github_username or "").lower(),
+            )
+        )
+    if user:
+        try:
+            from sqlmodel import text as sql_text
+            session.execute(
+                sql_text('UPDATE repoconfig SET user_id = :uid WHERE (user_id IS NULL OR user_id = "") AND (lower(owner) = lower(:owner) OR lower(owner) = lower(:gh_login))'),
+                {"uid": user.user_id, "owner": user.username, "gh_login": user.github_username or user.username}
+            )
+            session.commit()
+        except Exception:
+            pass
     # Only filter by owner if req_owner was explicitly requested and is not "all"
     if req_owner and req_owner != "all":
         query = query.where(func.lower(RepoConfig.owner) == req_owner)

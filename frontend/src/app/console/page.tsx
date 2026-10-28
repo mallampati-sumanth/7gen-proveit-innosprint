@@ -136,7 +136,7 @@ function MainApp() {
     try {
       const authJwt = (typeof window !== "undefined" ? localStorage.getItem("proveit_token") : null) || "";
       const userKey = user?.username ? `proveit_github_pat_${user.username}` : "proveit_github_pat";
-      const storedPat = (typeof window !== "undefined" ? (localStorage.getItem(userKey) || (user?.username === "admin" ? localStorage.getItem("proveit_github_pat") : null)) : null) || "";
+      const storedPat = (typeof window !== "undefined" ? (localStorage.getItem(userKey) || localStorage.getItem("proveit_github_pat") || "") : "") || "";
 
       const authHeaders: Record<string, string> = {};
       if (authJwt) {

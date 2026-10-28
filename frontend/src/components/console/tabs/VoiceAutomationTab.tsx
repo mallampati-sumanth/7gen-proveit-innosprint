@@ -147,6 +147,24 @@ export const VoiceAutomationTab = ({
     }
   };
 
+  // Delete all voice automation projects data
+  const handleClearAllTasks = async () => {
+    if (!window.confirm("Are you sure you want to delete all projects data and deployment history from the Voice Agents Automation page?")) {
+      return;
+    }
+    try {
+      const url = currentUser
+        ? `${API_BASE}/api/voice/automation/tasks?username=${encodeURIComponent(currentUser)}`
+        : `${API_BASE}/api/voice/automation/tasks`;
+      const res = await fetch(url, { method: "DELETE" });
+      if (res.ok) {
+        setTasks([]);
+      }
+    } catch (e) {
+      console.error("Could not delete voice automation tasks:", e);
+    }
+  };
+
   // Filtered task list (deduplicated by task_id)
   const filteredTasks = useMemo(() => {
     const seen = new Set<string>();
@@ -289,6 +307,20 @@ export const VoiceAutomationTab = ({
           >
             <I.Refresh /> Refresh
           </button>
+
+          {tasks.length > 0 && (
+            <button
+              onClick={handleClearAllTasks}
+              style={{
+                display: "flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 8,
+                border: "1px solid rgba(239, 68, 68, 0.4)", background: "rgba(239, 68, 68, 0.08)", color: "#ef4444",
+                fontSize: 12, fontWeight: 600, cursor: "pointer"
+              }}
+              title="Delete all project data from the voice automation tracker"
+            >
+              <I.Trash /> Clear All Projects
+            </button>
+          )}
 
           <button
             onClick={() => {

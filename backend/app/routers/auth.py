@@ -17,7 +17,8 @@ from sqlmodel import Session, select
 
 from backend.app.config import settings
 from backend.app.db import get_session
-from backend.app.entities.models import User
+from backend.app.entities.models import User, encrypt_secret, RepoConfig
+from sqlmodel import text
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 security = HTTPBearer(auto_error=False)
@@ -381,6 +382,7 @@ async def github_auth(req: GitHubAuthRequest, session: Session = Depends(get_ses
             auth_provider="github",
             github_id=gh_id,
             github_username=gh_login,
+            github_pat=encrypt_secret(gh_token) if gh_token else None,
             avatar_url=avatar_url,
             is_active=True,
             is_admin=False,
@@ -390,6 +392,8 @@ async def github_auth(req: GitHubAuthRequest, session: Session = Depends(get_ses
         # Update GitHub links
         user.github_id = gh_id
         user.github_username = gh_login
+        if gh_token:
+            user.github_pat = encrypt_secret(gh_token)
         if avatar_url:
             user.avatar_url = avatar_url
         if gh_name and not user.name:
@@ -398,6 +402,16 @@ async def github_auth(req: GitHubAuthRequest, session: Session = Depends(get_ses
 
     session.commit()
     session.refresh(user)
+
+    # Immediately link all existing repos matching user or unassigned to this user
+    try:
+        session.execute(
+            text('UPDATE repoconfig SET user_id = :uid WHERE (user_id IS NULL OR user_id = "") AND (lower(owner) = lower(:owner) OR lower(owner) = lower(:gh_login))'),
+            {"uid": user.user_id, "owner": user.username, "gh_login": gh_login}
+        )
+        session.commit()
+    except Exception:
+        pass
 
     # Persist the active GitHub token in runtime config so repo operations work seamlessly
     settings.GITHUB_TOKEN = gh_token
