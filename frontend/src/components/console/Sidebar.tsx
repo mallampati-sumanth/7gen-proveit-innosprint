@@ -81,7 +81,7 @@ export const Sidebar = ({
 }: {
   view: string;
   setView: (v: string) => void;
-  selectedInstance: string;
+  selectedInstance?: string;
   isOpen?: boolean;
   onClose?: () => void;
 }) => {
@@ -451,134 +451,6 @@ export const Sidebar = ({
           ))}
         </div>
 
-        {/* Sidebar footer: Enterprise Health Card */}
-        <div
-          style={{
-            padding: isCollapsed ? "12px 6px" : "12px 14px",
-            borderTop: "1px solid var(--border-soft)",
-            background: "var(--bg-card2)",
-            flexShrink: 0,
-          }}
-        >
-          {isCollapsed ? (
-            <div
-              style={{ display: "flex", justifyContent: "center" }}
-              title="FastAPI Orchestration Online · us-east-1"
-            >
-              <div
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  background: "var(--green)",
-                  animation: "pulseDot 2s infinite",
-                  boxShadow: "0 0 8px rgba(34, 197, 94, 0.4)",
-                }}
-              />
-            </div>
-          ) : (
-            <>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: 6,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    fontSize: 11.5,
-                    color: "var(--green)",
-                    fontWeight: 600,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: "50%",
-                      background: "var(--green)",
-                      animation: "pulseDot 2s infinite",
-                    }}
-                  />
-                  FastAPI Online
-                </div>
-                <div
-                  style={{
-                    fontSize: 10.5,
-                    color: "var(--text-4)",
-                    fontFamily: "JetBrains Mono, monospace",
-                  }}
-                >
-                  us-east-1
-                </div>
-              </div>
-
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "var(--text-4)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <span>Target Fleet</span>
-                <span
-                  title={selectedInstance || "Auto-Select"}
-                  style={{
-                    color: "var(--text-2)",
-                    fontFamily: "JetBrains Mono, monospace",
-                    fontWeight: 600,
-                    fontSize: 10.5,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    maxWidth: Math.max(80, width - 110),
-                  }}
-                >
-                  {selectedInstance ? selectedInstance.slice(0, 13) + "…" : "Auto-Select"}
-                </span>
-              </div>
-
-              <div
-                style={{
-                  marginTop: 8,
-                  paddingTop: 8,
-                  borderTop: "1px solid var(--border-soft)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 9.5,
-                    color: "var(--text-4)",
-                    textTransform: "uppercase",
-                    fontWeight: 700,
-                    letterSpacing: "0.04em",
-                  }}
-                >
-                  Multi-Cloud Fabric
-                </span>
-                <span
-                  style={{
-                    fontSize: 10,
-                    color: "var(--green)",
-                    fontWeight: 650,
-                  }}
-                >
-                  ● Active
-                </span>
-              </div>
-            </>
-          )}
-        </div>
 
         {/* Movable Drag Resizer Handle (Desktop only) */}
         {!isCollapsed && (
