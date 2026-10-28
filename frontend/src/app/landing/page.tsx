@@ -73,6 +73,16 @@ const CSS = `
     transition: border-color .18s, background .18s, transform .18s;
   }
   .sai-btn-out:hover { border-color: #a3a3a3; background: #fafafa; transform: scale(1.02); }
+  .sai-btn-apk-nav {
+    font-size: 13px; font-weight: 500; color: #16a34a;
+    background: #f0fdf4; border: 1.5px solid #bbf7d0; border-radius: 980px;
+    padding: 6px 14px; cursor: pointer; letter-spacing: -.01em;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+    transition: all .18s;
+  }
+  .sai-btn-apk-nav:hover {
+    border-color: #16a34a; background: #dcfce7; color: #15803d; transform: scale(1.02);
+  }
 
   .sai-user-chip {
     font-size: 13px; font-weight: 500; color: #0a0a0a;
@@ -158,6 +168,18 @@ const CSS = `
     transition: border-color .18s, background .18s, transform .2s cubic-bezier(.34,1.56,.64,1);
   }
   .sai-btn-hero-ghost:hover { border-color: #737373; background: #f5f5f5; transform: translateY(-1px); }
+  .sai-btn-hero-apk {
+    font-size: 15px; font-weight: 500; color: #16a34a;
+    background: #f0fdf4; border: 1.5px solid #bbf7d0; border-radius: 980px;
+    padding: 13px 28px; cursor: pointer; letter-spacing: -.01em;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 8px;
+    transition: border-color .18s, background .18s, transform .2s cubic-bezier(.34,1.56,.64,1), box-shadow .2s;
+    box-shadow: 0 2px 12px rgba(22, 163, 74, 0.08);
+  }
+  .sai-btn-hero-apk:hover {
+    border-color: #16a34a; background: #dcfce7; color: #15803d;
+    transform: translateY(-2px) scale(1.02); box-shadow: 0 6px 20px rgba(22, 163, 74, 0.16);
+  }
 
   .sai-rule { height: 1px; background: linear-gradient(90deg, transparent, #e5e5e5 25%, #e5e5e5 75%, transparent); max-width: 1200px; margin: 0 auto; }
   .sai-section { padding: 100px 0; position: relative; background: #ffffff !important; color: #0a0a0a !important; }
@@ -294,6 +316,15 @@ function IcoUser({ s = 18, c = "currentColor" }: { s?: number; c?: string }) {
 function IcoZap({ s = 10, c = "currentColor" }: { s?: number; c?: string }) {
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>;
 }
+function IcoDownload({ s = 16, c = "currentColor" }: { s?: number; c?: string }) {
+  return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
 
 function Reveal({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -426,6 +457,9 @@ function LandingContent() {
             ))}
           </div>
           <div className="sai-nav-actions">
+            <a href="/proveit.apk" download="proveit.apk" className="sai-btn-apk-nav" title="Download ProveIt Android APK">
+              <IcoDownload s={13} c="#16a34a" /> Download APK
+            </a>
             {mounted && activeUsername ? (
               <a href={APP} className="sai-user-chip" title={`Signed in as @${activeUsername}`}>
                 <span className="sai-user-dot" />
@@ -453,6 +487,9 @@ function LandingContent() {
           </p>
           <div className="sai-hero-btns" style={{ animation: "sai-up .9s cubic-bezier(.16,1,.3,1) 240ms both" }}>
             <a href={APP} className="sai-btn-hero">Go to Dashboard <IcoArrow s={14} c="#fff" /></a>
+            <a href="/proveit.apk" download="proveit.apk" className="sai-btn-hero-apk" title="Download ProveIt Mobile App (APK)">
+              <IcoDownload s={16} c="#16a34a" /> Download APK
+            </a>
             <a href="#workflow" className="sai-btn-hero-ghost">See how it works</a>
           </div>
         </div>
@@ -675,6 +712,9 @@ function LandingContent() {
           </p>
           <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
             <a href={APP} className="sai-btn-hero">Go to Dashboard <IcoArrow s={14} c="#fff" /></a>
+            <a href="/proveit.apk" download="proveit.apk" className="sai-btn-hero-apk" title="Download ProveIt Mobile App (APK)">
+              <IcoDownload s={16} c="#16a34a" /> Download APK
+            </a>
             <a href="#workflow" className="sai-btn-hero-ghost">Explore the workflow</a>
           </div>
         </Reveal>
