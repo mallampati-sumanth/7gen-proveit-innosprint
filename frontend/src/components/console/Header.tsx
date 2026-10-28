@@ -32,7 +32,22 @@ export const Header: React.FC<HeaderProps> = ({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close user dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    if (userMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [userMenuOpen]);
 
   // Command palette catalog
   const COMMAND_ITEMS = [
@@ -118,7 +133,7 @@ export const Header: React.FC<HeaderProps> = ({
     <>
       <header
         style={{
-          height: 56,
+          height: 52,
           display: "flex",
           alignItems: "center",
           padding: "0 18px",
@@ -156,112 +171,57 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* Brand Logo & Version Badge */}
+        {/* Clean Logo */}
         <a
           href="/"
           style={{
             textDecoration: "none",
             display: "flex",
             alignItems: "center",
-            gap: 9,
+            gap: 8,
             flexShrink: 0,
-            paddingRight: 4,
           }}
         >
-          {/* Glowing Emblem */}
           <div
             style={{
-              width: 26,
-              height: 26,
-              borderRadius: 7,
+              width: 24,
+              height: 24,
+              borderRadius: 6,
               background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               color: "#ffffff",
-              boxShadow: "0 0 12px rgba(16, 185, 129, 0.4)",
+              boxShadow: "0 0 10px rgba(16, 185, 129, 0.35)",
             }}
           >
             <I.ActivityPulse />
           </div>
-
-          <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
-            <span
-              style={{
-                fontSize: 16.5,
-                fontWeight: 750,
-                color: "var(--text-1)",
-                letterSpacing: "-.03em",
-              }}
-            >
-              prove<span style={{ color: "#10b981" }}>it</span>
-            </span>
-            <span
-              style={{
-                fontSize: 9.5,
-                fontWeight: 700,
-                letterSpacing: "0.06em",
-                padding: "1px 5px",
-                borderRadius: 4,
-                background: "rgba(16, 185, 129, 0.12)",
-                color: "#10b981",
-                border: "1px solid rgba(16, 185, 129, 0.25)",
-                textTransform: "uppercase",
-              }}
-            >
-              Pro
-            </span>
-          </div>
+          <span
+            style={{
+              fontSize: 16,
+              fontWeight: 750,
+              color: "var(--text-1)",
+              letterSpacing: "-.03em",
+            }}
+          >
+            prove<span style={{ color: "#10b981" }}>it</span>
+          </span>
         </a>
 
-        {/* Hairline Divider */}
-        <div style={{ width: 1, height: 18, background: "var(--border)", flexShrink: 0 }} />
+        {/* Subtle Divider */}
+        <div style={{ width: 1, height: 16, background: "var(--border)", flexShrink: 0 }} />
 
-        {/* Workspace Context Pill */}
-        <div
-          title="Active Production Workspace"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 7,
-            padding: "4px 10px",
-            borderRadius: 6,
-            background: "var(--bg-card2)",
-            border: "1px solid var(--border-soft)",
-            fontSize: 12,
-            fontWeight: 500,
-            color: "var(--text-2)",
-            cursor: "default",
-            userSelect: "none",
-          }}
-        >
-          <span style={{ color: "var(--text-1)", fontWeight: 600 }}>7gen-cloud</span>
-          <span style={{ color: "var(--text-4)" }}>/</span>
-          <span style={{ color: "var(--text-3)", fontSize: 11.5 }}>production</span>
-          <div
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: "50%",
-              background: "var(--green)",
-              animation: "pulseDot 2s infinite",
-            }}
-          />
-        </div>
-
-        {/* Hairline Divider */}
-        <div style={{ width: 1, height: 18, background: "var(--border)", flexShrink: 0 }} />
-
-        {/* Breadcrumb Section Tracker */}
+        {/* Minimal Breadcrumb */}
         <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
           <span style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 400 }}>Console</span>
-          <span style={{ color: "var(--text-4)", fontSize: 11, display: "flex", alignItems: "center" }}>
+          <span style={{ color: "var(--text-4)", fontSize: 10, display: "flex", alignItems: "center" }}>
             <I.ChevronRight />
           </span>
           <span
             style={{
               fontSize: 13,
-              fontWeight: 650,
+              fontWeight: 600,
               color: "var(--text-1)",
               letterSpacing: "-.01em",
               overflow: "hidden",
@@ -271,118 +231,190 @@ export const Header: React.FC<HeaderProps> = ({
           >
             {meta.title}
           </span>
-          {meta.badge && (
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 650,
-                padding: "2px 6px",
-                borderRadius: 9999,
-                background: "rgba(22, 163, 74, 0.1)",
-                color: "#16a34a",
-                border: "1px solid rgba(22, 163, 74, 0.2)",
-                marginLeft: 4,
-              }}
-            >
-              {meta.badge}
-            </span>
-          )}
         </div>
 
         {/* Middle Spacer */}
         <div style={{ flex: 1 }} />
 
-        {/* Quick Search & Command Palette Trigger (⌘K) */}
+        {/* Compact Quick Search Trigger (⌘K) */}
         <button
           onClick={() => setPaletteOpen(true)}
           className="menu-search-trigger"
           title="Search console or press ⌘K"
           aria-label="Open command palette"
+          style={{ padding: "5px 12px", maxWidth: 200 }}
         >
           <I.Search />
-          <span style={{ display: "inline-block", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            Search console or jump...
-          </span>
+          <span style={{ fontSize: 12 }}>Search...</span>
           <kbd>⌘K</kbd>
         </button>
 
-        {/* System Health Monitor Pill */}
-        <div
-          title="FastAPI Orchestration Engine Operational (Latency ~18ms)"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "5px 11px",
-            borderRadius: 9999,
-            background: "rgba(22, 163, 74, 0.08)",
-            border: "1px solid rgba(22, 163, 74, 0.22)",
-            color: "#16a34a",
-            fontSize: 11.5,
-            fontWeight: 600,
-            cursor: "default",
-            userSelect: "none",
-          }}
-        >
-          <div
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: "50%",
-              background: "#16a34a",
-              animation: "pulseDot 2s infinite",
-            }}
-          />
-          <span>18ms</span>
-        </div>
-
-        {/* GitHub Connection Pill */}
-        <button
-          onClick={onOpenConnect}
-          className="header-pill-btn"
-          title={profile?.connected ? `Connected as @${profile.username || profile.login}` : "Connect GitHub Account"}
-        >
-          <I.Github />
-          <span style={{ maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {profile?.connected ? `@${profile.username || profile.login}` : "Connect"}
-          </span>
-          <div
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: "50%",
-              background: profile?.connected ? "var(--green)" : "var(--yellow)",
-              flexShrink: 0,
-            }}
-          />
-        </button>
-
-        {/* User Account Avatar Pill */}
-        {currentUser && (
-          <div
+        {/* Unified User & Integration Menu Pill */}
+        <div style={{ position: "relative" }} ref={userMenuRef}>
+          <button
+            onClick={() => setUserMenuOpen(prev => !prev)}
             className="header-pill-btn"
-            style={{ cursor: "default" }}
-            title={`Logged in as ${currentUser} (System Architect)`}
+            title={`Account: @${currentUser || "user"}`}
+            style={{ padding: "4px 10px", gap: 7 }}
           >
             <div
               style={{
-                width: 18,
-                height: 18,
+                width: 20,
+                height: 20,
                 borderRadius: "50%",
                 background: "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
                 color: "#ffffff",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: 10,
+                fontSize: 10.5,
                 fontWeight: 700,
+                flexShrink: 0,
               }}
             >
-              {currentUser.charAt(0).toUpperCase()}
+              {(currentUser || "U").charAt(0).toUpperCase()}
             </div>
-            <span>@{currentUser}</span>
-          </div>
-        )}
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 550,
+                maxWidth: 120,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              @{currentUser || "user"}
+            </span>
+            <div
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: profile?.connected ? "var(--green)" : "var(--yellow)",
+                flexShrink: 0,
+              }}
+              title={profile?.connected ? "GitHub Connected" : "GitHub Disconnected"}
+            />
+            <span style={{ color: "var(--text-4)", display: "flex", alignItems: "center", marginLeft: -2 }}>
+              <I.ChevronDown />
+            </span>
+          </button>
+
+          {/* Account & Integrations Popover Dropdown */}
+          {userMenuOpen && (
+            <div
+              style={{
+                position: "absolute",
+                right: 0,
+                top: "calc(100% + 6px)",
+                width: 230,
+                background: "var(--bg-card)",
+                border: "1px solid var(--border)",
+                borderRadius: 10,
+                boxShadow: "0 12px 32px rgba(0,0,0,0.3)",
+                padding: "6px",
+                zIndex: 110,
+              }}
+            >
+              <div
+                style={{
+                  padding: "8px 10px",
+                  borderBottom: "1px solid var(--border-soft)",
+                  marginBottom: 4,
+                }}
+              >
+                <div style={{ fontSize: 12.5, fontWeight: 650, color: "var(--text-1)" }}>
+                  @{currentUser}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-4)" }}>
+                  System Architect
+                </div>
+              </div>
+
+              {/* GitHub Integration Item */}
+              <button
+                onClick={() => {
+                  setUserMenuOpen(false);
+                  if (onOpenConnect) onOpenConnect();
+                }}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "7px 10px",
+                  borderRadius: 6,
+                  border: "none",
+                  background: "transparent",
+                  color: "var(--text-2)",
+                  fontSize: 12,
+                  cursor: "pointer",
+                  transition: "all .12s",
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = "var(--bg-sidebar-hover)";
+                  e.currentTarget.style.color = "var(--text-1)";
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = "transparent";
+                  e.currentTarget.style.color = "var(--text-2)";
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <I.Github />
+                  <span>
+                    {profile?.connected
+                      ? `@${profile.username || profile.login}`
+                      : "Connect GitHub"}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: profile?.connected ? "var(--green)" : "var(--yellow)",
+                  }}
+                />
+              </button>
+
+              {/* Sign Out Option */}
+              {onLogout && (
+                <button
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    onLogout();
+                  }}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "7px 10px",
+                    borderRadius: 6,
+                    border: "none",
+                    background: "transparent",
+                    color: "var(--red)",
+                    fontSize: 12,
+                    cursor: "pointer",
+                    marginTop: 4,
+                    borderTop: "1px solid var(--border-soft)",
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = "rgba(239, 68, 68, 0.08)";
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  <I.Trash />
+                  <span>Sign Out</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Theme Switcher Button */}
         <button
@@ -393,8 +425,8 @@ export const Header: React.FC<HeaderProps> = ({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            width: 32,
-            height: 32,
+            width: 30,
+            height: 30,
             borderRadius: "50%",
             border: "1px solid var(--border)",
             cursor: "pointer",
@@ -405,57 +437,25 @@ export const Header: React.FC<HeaderProps> = ({
           onMouseEnter={e => {
             e.currentTarget.style.borderColor = "var(--text-3)";
             e.currentTarget.style.color = "var(--text-1)";
-            e.currentTarget.style.transform = "rotate(15deg)";
           }}
           onMouseLeave={e => {
             e.currentTarget.style.borderColor = "var(--border)";
             e.currentTarget.style.color = "var(--text-2)";
-            e.currentTarget.style.transform = "none";
           }}
         >
           {theme === "dark" ? <I.Sun /> : <I.Moon />}
         </button>
 
-        {/* Primary Deploy Action Button */}
+        {/* Primary Deploy Button */}
         <button
           onClick={onDeployClick}
           className="header-deploy-btn"
           title="Deploy stack to Vercel, Netlify, Render, Railway, or AWS EC2"
+          style={{ padding: "6px 16px", fontSize: 12.5 }}
         >
           <I.Play />
           <span>Deploy</span>
         </button>
-
-        {/* Sign Out Button */}
-        {currentUser && onLogout && (
-          <button
-            onClick={onLogout}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-              padding: "5px 11px",
-              borderRadius: 9999,
-              border: "1px solid var(--border)",
-              background: "transparent",
-              color: "var(--text-3)",
-              fontSize: 11.5,
-              fontWeight: 500,
-              cursor: "pointer",
-              transition: "all 0.16s ease",
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = "rgba(239, 68, 68, 0.35)";
-              e.currentTarget.style.color = "var(--red)";
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = "var(--border)";
-              e.currentTarget.style.color = "var(--text-3)";
-            }}
-          >
-            Sign Out
-          </button>
-        )}
       </header>
 
       {/* ─── Command Palette (⌘K) Modal ─── */}
