@@ -144,9 +144,14 @@ export const VoiceAutomationTab = ({
     }
   };
 
-  // Filtered task list
+  // Filtered task list (deduplicated by task_id)
   const filteredTasks = useMemo(() => {
-    return tasks.filter(t => {
+    const seen = new Set<string>();
+    return tasks.filter((t, idx) => {
+      const uniqueKey = t.task_id || `task-${idx}`;
+      if (seen.has(uniqueKey)) return false;
+      seen.add(uniqueKey);
+
       const matchesSearch =
         !search ||
         t.repo.toLowerCase().includes(search.toLowerCase()) ||
@@ -333,10 +338,10 @@ export const VoiceAutomationTab = ({
           border: "1px solid rgba(245, 158, 11, 0.35)",
           display: "flex", flexDirection: "column", gap: 12
         }}>
-          {tasks.filter(t => t.status === "RUNNING").map(t => {
+          {tasks.filter(t => t.status === "RUNNING").map((t, idx) => {
             const badge = getProviderBadge(t.provider);
             return (
-              <div key={t.task_id} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div key={`running-${t.task_id || idx}`} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <div style={{
@@ -442,14 +447,14 @@ export const VoiceAutomationTab = ({
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {filteredTasks.map(task => {
+          {filteredTasks.map((task, idx) => {
             const badge = getProviderBadge(task.provider);
             const isLive = task.status === "LIVE" || task.status === "SUCCESS";
             const isRunning = task.status === "RUNNING";
 
             return (
               <div
-                key={task.task_id}
+                key={`task-${task.task_id || idx}`}
                 style={{
                   padding: "20px 24px", borderRadius: 12,
                   background: "var(--bg-card)", border: "1px solid var(--border)",

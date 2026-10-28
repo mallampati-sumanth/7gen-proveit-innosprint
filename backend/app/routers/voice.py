@@ -1322,10 +1322,14 @@ def get_voice_automation_tasks(session: Session = Depends(get_session)):
     current stage progress, and the live link after deployment.
     """
     tasks: List[Dict[str, Any]] = []
+    seen_run_ids = set()
 
     # 1. Include any active in-flight tasks
     for it in reversed(VOICE_IN_FLIGHT_TASKS):
-        tasks.append(it)
+        tid = it.get("task_id")
+        if tid and tid not in seen_run_ids:
+            tasks.append(it)
+            seen_run_ids.add(tid)
 
     # 2. Query all voice ledger entries
     ledger_entries = session.exec(
@@ -1345,8 +1349,6 @@ def get_voice_automation_tasks(session: Session = Depends(get_session)):
     # Query all runs
     runs = session.exec(select(Run).order_by(Run.id.desc())).all()
     run_by_id = {r.run_id: r for r in runs}
-
-    seen_run_ids = set()
 
     prov_map = {
         "vercel": "Vercel Edge Platform",
@@ -1613,5 +1615,11 @@ async def trigger_voice_automation_task(
     in_flight["steps"][4]["detail"] = f"Deployed to {prov_display}"
     in_flight["steps"][5]["detail"] = f"Probed successfully 200 OK: {live_url}"
     in_flight["steps"][6]["detail"] = f"SHA-256: {sha_hash[:16]}..."
+
+    try:
+        if in_flight in VOICE_IN_FLIGHT_TASKS:
+            VOICE_IN_FLIGHT_TASKS.remove(in_flight)
+    except Exception:
+        pass
 
     return in_flight
