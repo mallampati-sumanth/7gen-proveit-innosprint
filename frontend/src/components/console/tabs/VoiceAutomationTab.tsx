@@ -165,6 +165,22 @@ export const VoiceAutomationTab = ({
     }
   };
 
+  // Delete a single voice automation task
+  const handleDeleteTask = async (taskId: string, repoName: string) => {
+    if (!window.confirm(`Are you sure you want to remove the deployment for ${repoName}?`)) {
+      return;
+    }
+    try {
+      const url = `${API_BASE}/api/voice/automation/tasks?task_id=${encodeURIComponent(taskId)}&repo=${encodeURIComponent(repoName)}`;
+      const res = await fetch(url, { method: "DELETE" });
+      if (res.ok) {
+        setTasks(prev => prev.filter(t => t.task_id !== taskId && t.repo !== repoName));
+      }
+    } catch (e) {
+      console.error("Could not delete voice automation task:", e);
+    }
+  };
+
   // Filtered task list (deduplicated by task_id)
   const filteredTasks = useMemo(() => {
     const seen = new Set<string>();
@@ -544,9 +560,20 @@ export const VoiceAutomationTab = ({
                     </div>
                   </div>
 
-                  <div style={{ textAlign: "right", fontSize: 11.5, color: "var(--text-3)" }}>
+                  <div style={{ textAlign: "right", fontSize: 11.5, color: "var(--text-3)", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                     <div>Run: <code style={{ fontFamily: "JetBrains Mono, monospace" }}>{task.task_id}</code></div>
                     <div>{task.timestamp ? new Date(task.timestamp).toLocaleString() : "Live"}</div>
+                    <button
+                      onClick={() => handleDeleteTask(task.task_id, task.repo)}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6,
+                        background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.25)", color: "#ef4444",
+                        fontSize: 11, fontWeight: 600, cursor: "pointer", marginTop: 2
+                      }}
+                      title={`Remove deployment of ${task.repo}`}
+                    >
+                      <I.Trash /> Delete Deployment
+                    </button>
                   </div>
                 </div>
 
