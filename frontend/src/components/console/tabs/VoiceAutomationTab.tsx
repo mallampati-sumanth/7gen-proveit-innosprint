@@ -60,7 +60,7 @@ export const VoiceAutomationTab = ({
   // Default initial simulate repo
   useEffect(() => {
     if (!simulateRepo && repos.length > 0) {
-      const topRepo = repos.find(r => r.name.toLowerCase().includes("friday") || r.name.toLowerCase().includes("draw") || r.name.toLowerCase().includes("crop")) || repos[0];
+      const topRepo = repos.find(r => r.name.toLowerCase().includes("campus") || r.name.toLowerCase().includes("climate") || r.name.toLowerCase().includes("weather")) || repos[0];
       setSimulateRepo(topRepo.name);
     }
   }, [repos, simulateRepo]);

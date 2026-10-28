@@ -508,7 +508,7 @@ async def telephony_verify_pin(request: Request, session: Session = Depends(get_
     repos = get_user_repositories(user, session)
     repo_names = [r.repo_id.split("/")[-1] for r in repos]
     meaningful = [n for n in repo_names if n.lower() not in [user.username.lower(), "myrepo", "resources"]]
-    priority_kw = ["friday", "osta", "portfolio", "fraud", "draw", "vibe"]
+    priority_kw = ["campus", "climate", "weather", "project", "portfolio", "vibe"]
     featured = [r for r in meaningful if any(kw in r.lower() for kw in priority_kw)]
     repo_list_speech = ", ".join(featured[:3] if featured else repo_names[:3])
     display_name = user.name or user.username
@@ -1056,7 +1056,7 @@ def agent_verify_caller(req: AgentAuthRequest, session: Session = Depends(get_se
         name for name in repo_names
         if name.lower() not in [user.username.lower(), "myrepo", "resources"]
     ]
-    priority_keywords = ["friday", "osta", "portfolio", "fraud", "draw", "vibe", "attendance", "inventory"]
+    priority_keywords = ["campus", "climate", "weather", "project", "portfolio", "attendance", "inventory"]
     featured = [r for r in meaningful_repos if any(kw in r.lower() for kw in priority_keywords)]
     featured_display = (featured[:3] if featured else meaningful_repos[:3]) or repo_names[:3]
 
@@ -1249,7 +1249,7 @@ async def agent_deploy_repository(req: AgentDeployRequest, session: Session = De
                 matched_repo = recent_log.matched_repo
             else:
                 # Pick top featured user repo
-                priority_kw = ["friday", "draw", "osta", "fraud", "ticket", "portal"]
+                priority_kw = ["campus", "climate", "weather", "project", "ticket", "portal"]
                 featured = [r for r in user_repos if any(kw in r.lower() for kw in priority_kw)]
                 matched_repo = featured[0] if featured else user_repos[0]
 
@@ -1695,7 +1695,7 @@ def get_voice_automation_tasks(username: Optional[str] = None, session: Session 
                 pass
             prov = (r.cloud_mode or "aws").lower().strip()
             prov_display = prov_map.get(prov, f"{prov.upper()} Cloud")
-            repo = r.target_repo or "AbhinayAmbati/fridayy"
+            repo = r.target_repo or "AbhinayAmbati/campus-climate"
             short_name = repo.split("/")[-1] if "/" in repo else repo
             matched_log = log_by_run.get(r.run_id)
             caller_phone = matched_log.caller_phone if matched_log else "+91 77998 26164"
@@ -1768,7 +1768,7 @@ def get_voice_automation_tasks(username: Optional[str] = None, session: Session 
         matched_log = log_by_run.get(run_id)
         matched_run = run_by_id.get(run_id)
 
-        repo = payload.get("repo") or (matched_log.matched_repo if matched_log else None) or (matched_run.target_repo if matched_run else "AbhinayAmbati/fridayy")
+        repo = payload.get("repo") or (matched_log.matched_repo if matched_log else None) or (matched_run.target_repo if matched_run else "AbhinayAmbati/campus-climate")
         live_url = payload.get("live_url") or ""
         short_name = repo.split("/")[-1] if "/" in repo else repo
 
