@@ -1451,7 +1451,7 @@ def list_runs(session: Session = Depends(get_session)):
             if rid and rid not in ledger_map:
                 ledger_map[rid] = {
                     "proof_hash": e.hash,
-                    "app_url": p.get("app_url"),
+                    "app_url": p.get("app_url") or p.get("live_url") or "",
                 }
         except Exception:
             pass
@@ -1485,7 +1485,7 @@ def get_run_details(run_id: str, session: Session = Depends(get_session)):
         proof_hash = entry.hash
         try:
             payload = json.loads(entry.payload_json) if entry.payload_json else {}
-            app_url = payload.get("app_url") or ""
+            app_url = payload.get("app_url") or payload.get("live_url") or ""
         except Exception:
             pass
 
