@@ -12,9 +12,17 @@
 [![Vercel](https://img.shields.io/badge/Cloud-Vercel%20Edge-000000?style=for-the-badge&logo=vercel)](https://vercel.com/)
 [![Sarvam AI](https://img.shields.io/badge/Voice-Sarvam%20AI%20STT%2FTTS-7C3AED?style=for-the-badge)](https://www.sarvam.ai/)
 [![Test Suite](https://img.shields.io/badge/Tests-25%2F25%20Passing-success?style=for-the-badge)](https://pytest.org/)
+[![Feature List](https://img.shields.io/badge/Documentation-Feature%20List-blue?style=for-the-badge)](FEATURE_LIST.md)
+[![Installation Guide](https://img.shields.io/badge/Documentation-Installation%20Guide-green?style=for-the-badge)](INSTALLATION_GUIDE.md)
 
 **Developed by Team 7TH GEN, KL University — Agentic AI Track 01**  
 *Built for enterprise cloud deployments with deterministic policy verification, multi-cloud target orchestration, conversational voice operations, and proof-carrying fixes.*
+
+---
+
+## 📚 Dedicated Project Documentation
+- 📋 **[Complete Feature List & Capability Matrix](FEATURE_LIST.md)**: Exhaustive breakdown of all 12 platform capabilities, ReAct loop, multi-cloud engines, VoiceOps, and security model.
+- 🛠️ **[Complete Installation & Setup Guide](INSTALLATION_GUIDE.md)**: Full step-by-step installation instructions for Windows, Linux, macOS, Docker Compose, Supabase, and cloud provider credentials.
 
 ---
 
@@ -23,16 +31,18 @@
 2. [Key Differentiators & Highlights](#-key-differentiators--highlights)
 3. [End-to-End System Architecture](#-end-to-end-system-architecture)
 4. [The 8-Stage ReAct Autonomous Pipeline](#-the-8-stage-react-autonomous-pipeline)
-5. [Core Platform Capabilities](#-core-platform-capabilities)
+5. [Core Platform Capabilities & Feature Summary](#-core-platform-capabilities)
    - [Multi-Cloud Orchestration (AWS, Render, Vercel, Railway, Netlify)](#1-multi-cloud-orchestration-engine)
    - [Telephony VoiceOps Automation](#2-telephony-voiceops-automation-sarvam-ai)
    - [Dynamic Entrypoint & Port Discovery](#3-dynamic-entrypoint--port-discovery)
    - [Autonomous Self-Healing SRE](#4-autonomous-self-healing-sre)
    - [Cryptographic Proof Ledger](#5-cryptographic-proof-ledger)
    - [Isolated Secret Vault & Security Architecture](#6-isolated-secret-vault--security-architecture)
+   - *[Full Feature List Documentation →](FEATURE_LIST.md)*
 6. [Repository & Codebase Structure](#-repository--codebase-structure)
 7. [API Gateway Reference](#-api-gateway-reference)
-8. [Local Development & Quickstart](#-local-development--quickstart)
+8. [Installation & Local Setup Guide](#-installation--local-setup-guide)
+   - *[Dedicated Installation Guide →](INSTALLATION_GUIDE.md)*
 9. [Production Deployment Guide](#-production-deployment-guide)
 10. [Verification & Testing](#-verification--testing)
 11. [Enterprise Roadmap](#-enterprise-roadmap)
@@ -344,72 +354,94 @@ Proof Seal = SHA-256( provider || deployment_id || live_url || commit_sha )
 
 ---
 
-## 💻 Local Development & Quickstart
+## 💻 Installation & Local Setup Guide
+
+> 📖 **For the detailed walkthrough including troubleshooting, cloud credential setup, and production guidelines, see the dedicated [INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md).**
 
 ### Prerequisites
-* Python 3.11+ (or 3.14)
-* Node.js 18+ & npm
-* Git
+* **Python**: 3.11+ (or 3.12 / 3.14)
+* **Node.js**: 18.17+ & npm 9+
+* **Git**: 2.30+
+* **Docker Engine & Compose** *(optional, for containerized run)*
 
-### 1. Clone & Setup Workspace
+---
+
+### Step 1: Clone Repository
 ```bash
 git clone https://github.com/mallampati-sumanth/7gen-proveit-innosprint.git
 cd 7gen-proveit-innosprint
 ```
 
-### 2. Configure Environment Variables
-Copy `.env.example` to `.env`:
+---
+
+### Step 2: Configure Environment Variables
+Copy the master template `.env.example` to `.env`:
 ```bash
+# Windows PowerShell
+Copy-Item .env.example .env
+
+# Linux / macOS / Git Bash
 cp .env.example .env
 ```
-Populate your environment variables (LLM keys, GitHub OAuth, Sarvam AI, cloud tokens):
+
+Key configuration defaults (see `.env.example` for all options):
 ```env
-# Core Database & Security
+# Server & Database
+ENVIRONMENT=development
 DATABASE_URL=sqlite:///./proveit.db
-JWT_SECRET=your_super_secret_jwt_key_min_32_chars
+JWT_SECRET=super_secret_jwt_key_min_32_characters
 
-# AI Engine (At least one required)
-GEMINI_API_KEY=your_gemini_api_key
-# GROQ_API_KEY=your_groq_api_key
-# OPENAI_API_KEY=your_openai_api_key
+# AI Intelligence Core (Gemini, Groq, or OpenAI)
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-2.5-flash
 
-# Cloud Target Providers (Optional for local testing)
-RENDER_API_KEY=rnd_your_render_api_key
-VERCEL_TOKEN=your_vercel_token
-AWS_ACCESS_KEY_ID=your_aws_key
-AWS_SECRET_ACCESS_KEY=your_aws_secret
-AWS_DEFAULT_REGION=us-east-1
-
-# Telephony VoiceOps
-SARVAM_API_KEY=your_sarvam_api_key
+# Execution Mode ("mock" for offline zero-cost simulation, "aws" for live EC2)
+CLOUD_MODE=mock
 ```
 
-### 3. Start Backend Server
+---
+
+### Step 3: Install & Start Backend (FastAPI)
 ```bash
-# Windows
+# Windows PowerShell
 python -m venv venv
 .\venv\Scripts\activate
+pip install --upgrade pip
 pip install -r backend/requirements.txt
 uvicorn backend.app.main:app --reload --port 8000
 
-# Linux/macOS
+# Linux / macOS
 python3 -m venv venv
 source venv/bin/activate
+pip install --upgrade pip
 pip install -r backend/requirements.txt
 uvicorn backend.app.main:app --reload --port 8000
 ```
-* API Documentation: `http://localhost:8000/docs`
-* Health Check: `http://localhost:8000/api/health`
+* **Interactive API Docs:** `http://localhost:8000/docs`
+* **System Healthcheck:** `http://localhost:8000/health` or `http://localhost:8000/api/health`
 
-### 4. Start Frontend Console
-In a separate terminal:
+---
+
+### Step 4: Install & Start Frontend (Next.js 14)
+Open a second terminal window:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-* Open your browser at `http://localhost:3000`
-* Sign in using 1-Click Demo Admin or register an account.
+* **Web Console:** `http://localhost:3000`
+* **Authentication:** Click **1-Click Demo Admin** or register a new user account.
+
+---
+
+### Step 5: Full-Stack Docker Compose (Alternative)
+Run both backend and demo target in containers with one command:
+```bash
+docker compose up --build -d
+```
+* Frontend / Target: `http://localhost:3000`
+* FastAPI Backend: `http://localhost:8000`
 
 ---
 
